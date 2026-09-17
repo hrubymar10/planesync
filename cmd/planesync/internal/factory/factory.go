@@ -68,7 +68,7 @@ func buildService(config configuration.Config, project configuration.Project, li
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},
-		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID},
+		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID, parentEpicKey: project.EpicKey},
 		links,
 		statusmap.New(project.StatusMap, project.StatusGroupMap, project.ResolutionMap),
 		settings,
@@ -107,8 +107,16 @@ func sourceItems(items []plane.Item) []appsync.Item {
 }
 
 type targetAdapter struct {
-	client            *jira.Client
+	client            jiraTargetClient
 	assigneeAccountID string
+	parentEpicKey     string
+}
+
+type jiraTargetClient interface {
+	FindByLabel(context.Context, string) (string, bool, error)
+	Create(context.Context, jira.CreateInput) (string, error)
+	Update(context.Context, string, jira.UpdateInput) error
+	SetStatus(context.Context, string, string, string) error
 }
 
 func (a targetAdapter) FindByLabel(ctx context.Context, label string) (string, bool, error) {
@@ -120,6 +128,7 @@ func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (str
 		Project: spec.Project, IssueType: spec.IssueType, Summary: spec.Summary,
 		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink), Labels: spec.Labels,
 		AssigneeAccountID: a.assigneeAccountID,
+		ParentEpicKey:     a.parentEpicKey,
 	})
 }
 
@@ -127,6 +136,7 @@ func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.Upda
 	return a.client.Update(ctx, key, jira.UpdateInput{
 		Summary: spec.Summary, Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink),
 		AssigneeAccountID: a.assigneeAccountID,
+		ParentEpicKey:     a.parentEpicKey,
 	})
 }
 

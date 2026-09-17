@@ -43,6 +43,9 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Projects[0].ResolutionMap["Cancelled"]; got != "Declined" {
 		t.Errorf("resolution mapping = %q", got)
 	}
+	if got := result.Projects[0].EpicKey; got != "DST-100" {
+		t.Errorf("epic key = %q", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {

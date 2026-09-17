@@ -84,6 +84,7 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 				Description json.RawMessage `json:"description"`
 				Labels      []string        `json:"labels"`
 				Assignee    *assignee       `json:"assignee"`
+				Parent      *parent         `json:"parent"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -95,6 +96,9 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		}
 		if body.Fields.Assignee == nil || body.Fields.Assignee.AccountID != "account-current" {
 			t.Errorf("assignee = %#v", body.Fields.Assignee)
+		}
+		if body.Fields.Parent == nil || body.Fields.Parent.Key != "epic-parent" {
+			t.Errorf("parent = %#v", body.Fields.Parent)
 		}
 		if !jsonEqual(body.Fields.Description, description) {
 			t.Errorf("description = %s, want %s", body.Fields.Description, description)
@@ -110,6 +114,7 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		Description:       description,
 		Labels:            []string{"source-label", "sync-label"},
 		AssigneeAccountID: "account-current",
+		ParentEpicKey:     "epic-parent",
 	})
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
@@ -128,6 +133,7 @@ func TestUpdate(t *testing.T) {
 				Summary     string          `json:"summary"`
 				Description json.RawMessage `json:"description"`
 				Assignee    *assignee       `json:"assignee"`
+				Parent      *parent         `json:"parent"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -137,11 +143,14 @@ func TestUpdate(t *testing.T) {
 		if body.Fields.Assignee == nil || body.Fields.Assignee.AccountID != "account-current" {
 			t.Errorf("assignee = %#v", body.Fields.Assignee)
 		}
+		if body.Fields.Parent == nil || body.Fields.Parent.Key != "epic-parent" {
+			t.Errorf("parent = %#v", body.Fields.Parent)
+		}
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current"}); err != nil {
+	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current", ParentEpicKey: "epic-parent"}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 }
@@ -154,6 +163,9 @@ func TestCreateAndUpdateOmitEmptyAssignee(t *testing.T) {
 		decodeRequest(t, request, &body)
 		if _, exists := body.Fields["assignee"]; exists {
 			t.Error("empty assignee was included in fields")
+		}
+		if _, exists := body.Fields["parent"]; exists {
+			t.Error("empty parent was included in fields")
 		}
 		if request.Method == http.MethodPost {
 			writeJSON(writer, http.StatusCreated, `{"key":"created-key"}`)

@@ -1,10 +1,14 @@
 package factory
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	appsync "github.com/hrubymar10/planesync/internal/application/sync"
+	"github.com/hrubymar10/planesync/internal/infrastructure/jira"
 )
 
 func TestBuildExampleConfiguration(t *testing.T) {
@@ -29,3 +33,35 @@ func TestBuildExampleConfiguration(t *testing.T) {
 		t.Errorf("projects = %#v", projects)
 	}
 }
+
+func TestTargetAdapterForwardsEpicKey(t *testing.T) {
+	client := &fakeJiraTarget{}
+	adapter := targetAdapter{client: client, parentEpicKey: "epic-parent"}
+	if _, err := adapter.Create(context.Background(), appsync.CreateSpec{}); err != nil {
+		t.Fatalf("Create(): %v", err)
+	}
+	if err := adapter.Update(context.Background(), "target-key", appsync.UpdateSpec{}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+	if client.created.ParentEpicKey != "epic-parent" || client.updated.ParentEpicKey != "epic-parent" {
+		t.Errorf("create/update epic keys = %q/%q", client.created.ParentEpicKey, client.updated.ParentEpicKey)
+	}
+}
+
+type fakeJiraTarget struct {
+	created jira.CreateInput
+	updated jira.UpdateInput
+}
+
+func (*fakeJiraTarget) FindByLabel(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+func (f *fakeJiraTarget) Create(_ context.Context, input jira.CreateInput) (string, error) {
+	f.created = input
+	return "target-key", nil
+}
+func (f *fakeJiraTarget) Update(_ context.Context, _ string, input jira.UpdateInput) error {
+	f.updated = input
+	return nil
+}
+func (*fakeJiraTarget) SetStatus(context.Context, string, string, string) error { return nil }

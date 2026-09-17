@@ -31,6 +31,7 @@ type CreateInput struct {
 	Description       json.RawMessage
 	Labels            []string
 	AssigneeAccountID string
+	ParentEpicKey     string
 }
 
 // UpdateInput contains the Jira fields updated on an existing issue.
@@ -38,10 +39,15 @@ type UpdateInput struct {
 	Summary           string
 	Description       json.RawMessage
 	AssigneeAccountID string
+	ParentEpicKey     string
 }
 
 type assignee struct {
 	AccountID string `json:"accountId"`
+}
+
+type parent struct {
+	Key string `json:"key"`
 }
 
 // Client creates, updates, searches, and transitions Jira issues.
@@ -175,6 +181,7 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 			Description json.RawMessage `json:"description"`
 			Labels      []string        `json:"labels"`
 			Assignee    *assignee       `json:"assignee,omitempty"`
+			Parent      *parent         `json:"parent,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Project.Key = input.Project
@@ -184,6 +191,9 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 	request.Fields.Labels = append([]string{}, input.Labels...)
 	if input.AssigneeAccountID != "" {
 		request.Fields.Assignee = &assignee{AccountID: input.AssigneeAccountID}
+	}
+	if input.ParentEpicKey != "" {
+		request.Fields.Parent = &parent{Key: input.ParentEpicKey}
 	}
 
 	var response struct {
@@ -208,12 +218,16 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 			Summary     string          `json:"summary"`
 			Description json.RawMessage `json:"description"`
 			Assignee    *assignee       `json:"assignee,omitempty"`
+			Parent      *parent         `json:"parent,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Summary = input.Summary
 	request.Fields.Description = input.Description
 	if input.AssigneeAccountID != "" {
 		request.Fields.Assignee = &assignee{AccountID: input.AssigneeAccountID}
+	}
+	if input.ParentEpicKey != "" {
+		request.Fields.Parent = &parent{Key: input.ParentEpicKey}
 	}
 	if err := c.do(ctx, http.MethodPut, "issue/"+key, request, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("update Jira issue: %w", err)

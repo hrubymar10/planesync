@@ -50,6 +50,7 @@ type Project struct {
 	StatusMap      map[string]string `json:"status_map"`
 	StatusGroupMap map[string]string `json:"status_group_map,omitempty"`
 	ResolutionMap  map[string]string `json:"resolution_map,omitempty"`
+	EpicKey        string            `json:"epic_key,omitempty"`
 }
 
 // Secret holds a sensitive configuration value.

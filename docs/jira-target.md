@@ -25,6 +25,8 @@ as a redacting value.
 By default, create and update payloads set `assignee.accountId` to the account
 returned by `/myself`, so manual reassignments are corrected on the next run.
 This can be disabled with `defaults.assign_all_to_me`.
+When a project has `epic_key`, create and update payloads also set
+`parent.key`, keeping mirrored issues under that epic after manual re-parenting.
 
 Descriptions are Atlassian Document Format. See [body-formatting.md](body-formatting.md).
 The base URL must be HTTPS; redirects are disabled, requests time out, response

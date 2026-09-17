@@ -18,7 +18,7 @@ with placeholder values only.
   "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",
-      "title_prefix": "[team]", "status_map": { }, "status_group_map": { }, "resolution_map": { } }
+      "title_prefix": "[team]", "epic_key": "DST-100", "status_map": { }, "status_group_map": { }, "resolution_map": { } }
   ]
 }
 ```
@@ -46,3 +46,6 @@ omitted; set it to `false` to leave assignment unchanged.
 `projects[].resolution_map` maps exact source state names to destination
 resolution names. `defaults.deleted_resolution` supplies the resolution used
 when a missing source item is transitioned to `deleted_status`.
+
+`projects[].epic_key` optionally places every created or updated target issue
+under that epic through the destination `parent` field.
