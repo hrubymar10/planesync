@@ -194,6 +194,48 @@ func TestResponseBodyIsBounded(t *testing.T) {
 	}
 }
 
+func TestStatesRetriesRateLimitWithRetryAfter(t *testing.T) {
+	attempts := 0
+	client, server := newTestClient(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts == 1 {
+			writer.Header().Set("Retry-After", "2")
+			writer.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		writeJSON(writer, `{"next_page_results":false,"results":[{"id":"state-one","name":"Started","group":"started"}]}`)
+	}))
+	defer server.Close()
+
+	var waits []time.Duration
+	client.wait = func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	}
+	states, err := client.States(context.Background())
+	if err != nil {
+		t.Fatalf("States(): %v", err)
+	}
+	if len(states) != 1 || attempts != 2 || len(waits) != 1 || waits[0] != 2*time.Second {
+		t.Errorf("states/attempts/waits = %#v / %d / %v", states, attempts, waits)
+	}
+}
+
+func TestStatesStopsAfterRateLimitAttemptCap(t *testing.T) {
+	attempts := 0
+	client, server := newTestClient(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		attempts++
+		writer.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	client.wait = func(context.Context, time.Duration) error { return nil }
+
+	_, err := client.States(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "HTTP 429") || attempts != maxRequestAttempts {
+		t.Fatalf("States() error/attempts = %v / %d", err, attempts)
+	}
+}
+
 func newTestClient(t *testing.T, handler http.Handler) (*Client, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewTLSServer(handler)

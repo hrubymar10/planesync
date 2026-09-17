@@ -22,4 +22,5 @@ Requests use the `X-API-Key` header, target the current project, `/work-items/`,
 and `/states/` endpoints, and follow cursor pagination (`next_cursor` /
 `next_page_results` / `results`) with loop protection. The base URL must be
 HTTPS; redirects are disabled, requests time out, and the response body is
-bounded. The token never appears in URLs, logs, or errors.
+bounded. Rate-limited requests retry with bounded `Retry-After` or exponential
+delays. The token never appears in URLs, logs, or errors.

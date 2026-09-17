@@ -81,6 +81,18 @@ func TestValidateReportsRequiredFields(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsNegativeThrottle(t *testing.T) {
+	config := Config{
+		Jira:     Endpoint{BaseURL: "https://jira.example.com", CloudID: "cloud", Email: "you@example.com", Token: Secret("token")},
+		Plane:    Endpoint{BaseURL: "https://plane.example.com", Workspace: "workspace", Token: Secret("token")},
+		Defaults: Defaults{Since: "7d", BodyFormat: "rich", ThrottleMS: -1},
+		Projects: []Project{{PlaneProject: "source", JiraProject: "target", JiraIssueType: "Task"}},
+	}
+	if err := config.Validate(); err == nil || !strings.Contains(err.Error(), "defaults.throttle_ms") {
+		t.Fatalf("Validate() error = %v, want throttle validation", err)
+	}
+}
+
 func TestValidateJiraAuthentication(t *testing.T) {
 	valid := Config{
 		Jira:     Endpoint{BaseURL: "https://jira.example.com", CloudID: "example-cloud", Email: "you@example.com", Token: Secret("jira-token")},

@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	defaultAuthType = "basic"
-	defaultTimeout  = 30 * time.Second
-	maxResponseSize = 8 << 20
-	maxErrorSize    = 2 << 10
+	defaultAuthType    = "basic"
+	defaultTimeout     = 30 * time.Second
+	maxResponseSize    = 8 << 20
+	maxErrorSize       = 2 << 10
+	maxRequestAttempts = 5
 )
 
 // CreateInput contains the Jira fields set when creating an issue.
@@ -69,6 +70,7 @@ type Client struct {
 	authType      string
 	authorization configuration.Secret
 	httpClient    *http.Client
+	wait          func(context.Context, time.Duration) error
 }
 
 type apiError struct {
@@ -144,6 +146,7 @@ func New(baseURL, cloudID, email, authType string, token configuration.Secret) (
 				return fmt.Errorf("redirects are not allowed")
 			},
 		},
+		wait: httpbase.Wait,
 	}, nil
 }
 
@@ -343,54 +346,75 @@ func TextToADF(text string) json.RawMessage {
 }
 
 func (c *Client) do(ctx context.Context, method, resource string, input any, expectedStatus int, output any) error {
-	var body io.Reader
+	var encoded []byte
 	if input != nil {
-		encoded, err := json.Marshal(input)
+		var err error
+		encoded, err = json.Marshal(input)
 		if err != nil {
 			return fmt.Errorf("encode request: %w", err)
 		}
-		body = bytes.NewReader(encoded)
 	}
 
 	requestURL := *c.baseURL
 	requestURL.Path = strings.TrimRight(requestURL.Path, "/") + "/rest/api/3/" + resource
-	request, err := http.NewRequestWithContext(ctx, method, requestURL.String(), body)
-	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", c.authorization.Reveal())
-	if input != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("send request: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != expectedStatus {
-		snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorSize))
-		if readErr != nil {
-			return fmt.Errorf("Jira API returned HTTP %d (read error body: %v)", response.StatusCode, readErr)
+	for attempt := 0; attempt < maxRequestAttempts; attempt++ {
+		var body io.Reader
+		if input != nil {
+			body = bytes.NewReader(encoded)
 		}
-		return &apiError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(snippet))}
-	}
-	if output == nil {
+		request, err := http.NewRequestWithContext(ctx, method, requestURL.String(), body)
+		if err != nil {
+			return fmt.Errorf("create request: %w", err)
+		}
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Authorization", c.authorization.Reveal())
+		if input != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
+
+		response, err := c.httpClient.Do(request)
+		if err != nil {
+			return fmt.Errorf("send request: %w", err)
+		}
+		if response.StatusCode == http.StatusTooManyRequests && attempt+1 < maxRequestAttempts {
+			delay := httpbase.RetryDelay(response.Header.Get("Retry-After"), attempt, time.Now())
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maxErrorSize))
+			_ = response.Body.Close()
+			wait := c.wait
+			if wait == nil {
+				wait = httpbase.Wait
+			}
+			if err := wait(ctx, delay); err != nil {
+				return fmt.Errorf("wait to retry Jira request: %w", err)
+			}
+			continue
+		}
+
+		defer response.Body.Close()
+		if response.StatusCode != expectedStatus {
+			snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorSize))
+			if readErr != nil {
+				return fmt.Errorf("Jira API returned HTTP %d (read error body: %v)", response.StatusCode, readErr)
+			}
+			return &apiError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(snippet))}
+		}
+		if output == nil {
+			return nil
+		}
+
+		responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseSize+1))
+		if err != nil {
+			return fmt.Errorf("read response: %w", err)
+		}
+		if len(responseBody) > maxResponseSize {
+			return fmt.Errorf("Jira API response exceeds %d bytes", maxResponseSize)
+		}
+		if err := json.Unmarshal(responseBody, output); err != nil {
+			return fmt.Errorf("decode response: %w", err)
+		}
 		return nil
 	}
-
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseSize+1))
-	if err != nil {
-		return fmt.Errorf("read response: %w", err)
-	}
-	if len(responseBody) > maxResponseSize {
-		return fmt.Errorf("Jira API response exceeds %d bytes", maxResponseSize)
-	}
-	if err := json.Unmarshal(responseBody, output); err != nil {
-		return fmt.Errorf("decode response: %w", err)
-	}
-	return nil
+	return fmt.Errorf("Jira request exhausted retries")
 }
 
 func validatePathSegment(name, value string) error {

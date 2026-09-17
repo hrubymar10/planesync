@@ -43,9 +43,9 @@ planesync sync --full --dry-run      # preview a full backfill
 planesync sync                       # incremental, last 7 days
 ```
 
-Each configured project is processed in turn. Every processed item prints one
-line with its source reference, destination key, and outcome, followed by a
-summary:
+Each configured project is processed in turn. Every processed item streams one
+line immediately with its source reference, destination key, and outcome. The
+counts summary prints after the project's final item:
 
 ```
 SRC-16 -> CORE-4277: updated
@@ -59,6 +59,13 @@ Dry-run output uses `(new)` as the destination key for pending creates:
 SRC-17 -> (new): created
 created=1 updated=0 status-set=1 deleted=0 skipped=0
 ```
+
+Plane and Jira requests that receive HTTP 429 retry up to five attempts. The
+delay honors `Retry-After` seconds or HTTP dates; without that header, retries
+use exponential backoff. Each wait is capped at 60 seconds and stops promptly
+when the run is canceled. Real runs also pause for the configured
+`defaults.throttle_ms` between items to reduce rate-limit pressure proactively;
+dry runs and the final item do not pause.
 
 Use `--limit N` to process at most the first N source items, sorted by ID.
 The default `0` is unlimited. Limited runs disable delete reconciliation because

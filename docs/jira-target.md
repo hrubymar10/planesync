@@ -33,5 +33,6 @@ empty, the priority field is omitted.
 Descriptions are Atlassian Document Format. See [body-formatting.md](body-formatting.md).
 The base URL must be HTTPS; redirects are disabled, requests time out, response
 bodies are bounded, and the authorization header never appears in logs or errors.
+Rate-limited requests retry with bounded `Retry-After` or exponential delays.
 Non-success responses include a bounded prefix of the destination API's error
 body so validation failures are actionable without exposing request headers.

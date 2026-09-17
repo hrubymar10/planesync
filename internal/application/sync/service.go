@@ -72,6 +72,7 @@ type Settings struct {
 	BodyFormat        string
 	DeletedStatus     string
 	DeletedResolution string
+	Throttle          time.Duration
 }
 
 // Mode selects the source items and reconciliation behavior for a run.
@@ -92,6 +93,8 @@ type Options struct {
 	Since  time.Time
 	DryRun bool
 	Limit  int
+	// OnItem receives each outcome synchronously as its item finishes.
+	OnItem func(Action)
 }
 
 // ActionKind identifies a reported per-item outcome.
@@ -131,11 +134,12 @@ type Service struct {
 	links    Links
 	resolver StatusResolver
 	settings Settings
+	wait     func(context.Context, time.Duration) error
 }
 
 // New creates a synchronization service.
 func New(source Source, target Target, links Links, resolver StatusResolver, settings Settings) *Service {
-	return &Service{source: source, target: target, links: links, resolver: resolver, settings: settings}
+	return &Service{source: source, target: target, links: links, resolver: resolver, settings: settings, wait: waitContext}
 }
 
 // Run synchronizes one configured project.
@@ -171,12 +175,38 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 	present := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		present[item.ID] = struct{}{}
-		if err := s.syncItem(ctx, item, links, options.DryRun, &report); err != nil {
+	}
+	var missing []string
+	if options.Limit == 0 && (options.Mode == Full || options.Mode == Reconcile) {
+		missing = missingSourceIDs(present, links)
+	}
+	remaining := len(items) + len(missing)
+	emit := func(action Action) error {
+		report.Actions = append(report.Actions, action)
+		if options.OnItem != nil {
+			options.OnItem(action)
+		}
+		remaining--
+		if options.DryRun || remaining == 0 || s.settings.Throttle <= 0 {
+			return nil
+		}
+		wait := s.wait
+		if wait == nil {
+			wait = waitContext
+		}
+		if err := wait(ctx, s.settings.Throttle); err != nil {
+			return fmt.Errorf("throttle between items: %w", err)
+		}
+		return nil
+	}
+
+	for _, item := range items {
+		if err := s.syncItem(ctx, item, links, options.DryRun, emit, &report); err != nil {
 			return report, err
 		}
 	}
-	if options.Limit == 0 && (options.Mode == Full || options.Mode == Reconcile) {
-		if err := s.reconcileDeleted(ctx, present, links, options.DryRun, &report); err != nil {
+	if len(missing) > 0 {
+		if err := s.reconcileDeleted(ctx, missing, links, options.DryRun, emit, &report); err != nil {
 			return report, err
 		}
 	}
@@ -188,7 +218,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 	return report, nil
 }
 
-func (s *Service) syncItem(ctx context.Context, item Item, links map[string]string, dryRun bool, report *Report) error {
+func (s *Service) syncItem(ctx context.Context, item Item, links map[string]string, dryRun bool, emit func(Action) error, report *Report) error {
 	mappedKey, mapped := links[item.ID]
 	key, resolution := linkmap.Decide(linkmap.Hit{Key: mappedKey, OK: mapped})
 	summary := mirror.Summary(s.settings.TitlePrefix, item.Title)
@@ -231,8 +261,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 	if !ok {
 		report.Skipped++
 		action.Detail = "skipped status: " + item.StateName
-		report.Actions = append(report.Actions, action)
-		return nil
+		return emit(action)
 	}
 	report.StatusSet++
 	if !dryRun {
@@ -240,11 +269,10 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 			return fmt.Errorf("set target %q status for source item %q: %w", key, item.ID, err)
 		}
 	}
-	report.Actions = append(report.Actions, action)
-	return nil
+	return emit(action)
 }
 
-func (s *Service) reconcileDeleted(ctx context.Context, present map[string]struct{}, links map[string]string, dryRun bool, report *Report) error {
+func missingSourceIDs(present map[string]struct{}, links map[string]string) []string {
 	var missing []string
 	for sourceID := range links {
 		if _, exists := present[sourceID]; !exists {
@@ -252,11 +280,17 @@ func (s *Service) reconcileDeleted(ctx context.Context, present map[string]struc
 		}
 	}
 	sort.Strings(missing)
+	return missing
+}
+
+func (s *Service) reconcileDeleted(ctx context.Context, missing []string, links map[string]string, dryRun bool, emit func(Action) error, report *Report) error {
 	for _, sourceID := range missing {
 		key := links[sourceID]
 		if s.settings.DeletedStatus == "" {
 			report.Skipped++
-			report.Actions = append(report.Actions, Action{Kind: ActionSkipDelete, SourceID: sourceID, Reference: sourceID, Key: key})
+			if err := emit(Action{Kind: ActionSkipDelete, SourceID: sourceID, Reference: sourceID, Key: key}); err != nil {
+				return err
+			}
 			continue
 		}
 		report.Deleted++
@@ -266,7 +300,20 @@ func (s *Service) reconcileDeleted(ctx context.Context, present map[string]struc
 			}
 			delete(links, sourceID)
 		}
-		report.Actions = append(report.Actions, Action{Kind: ActionDeleted, SourceID: sourceID, Reference: sourceID, Key: key})
+		if err := emit(Action{Kind: ActionDeleted, SourceID: sourceID, Reference: sourceID, Key: key}); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func waitContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

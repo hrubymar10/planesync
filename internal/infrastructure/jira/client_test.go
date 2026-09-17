@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hrubymar10/planesync/internal/domain/configuration"
+	"github.com/hrubymar10/planesync/internal/infrastructure/httpbase"
 )
 
 const testToken = "top-secret-token"
@@ -413,6 +416,60 @@ func TestResponseBodyIsBounded(t *testing.T) {
 	_, err := client.CurrentUserAccountID(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "response exceeds") {
 		t.Fatalf("CurrentUserAccountID() error = %v, want response-size error", err)
+	}
+}
+
+func TestCreateRetriesRateLimitWithRetryAfter(t *testing.T) {
+	attempts := 0
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		attempts++
+		var body struct {
+			Fields struct {
+				Summary string `json:"summary"`
+			} `json:"fields"`
+		}
+		decodeRequest(t, request, &body)
+		if body.Fields.Summary != "Retry me" {
+			t.Errorf("request %d summary = %q", attempts, body.Fields.Summary)
+		}
+		if attempts == 1 {
+			writer.Header().Set("Retry-After", "3")
+			writeJSON(writer, http.StatusTooManyRequests, `{"error":"rate limited"}`)
+			return
+		}
+		writeJSON(writer, http.StatusCreated, `{"key":"created-key"}`)
+	}))
+	defer server.Close()
+
+	var waits []time.Duration
+	client.wait = func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	}
+	key, err := client.Create(context.Background(), CreateInput{Project: "DST", IssueType: "Task", Summary: "Retry me"})
+	if err != nil {
+		t.Fatalf("Create(): %v", err)
+	}
+	if key != "created-key" || attempts != 2 || !reflect.DeepEqual(waits, []time.Duration{3 * time.Second}) {
+		t.Errorf("key/attempts/waits = %q / %d / %v", key, attempts, waits)
+	}
+}
+
+func TestCreateRateLimitWaitHonorsContext(t *testing.T) {
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Retry-After", "60")
+		writeJSON(writer, http.StatusTooManyRequests, `{}`)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client.wait = func(ctx context.Context, delay time.Duration) error {
+		cancel()
+		return httpbase.Wait(ctx, delay)
+	}
+	_, err := client.Create(ctx, CreateInput{Project: "DST", IssueType: "Task"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Create() error = %v, want context cancellation", err)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 const (
 	jiraTokenEnvironment  = "JIRA_TOKEN"
 	planeTokenEnvironment = "PLANE_TOKEN"
+	defaultThrottleMS     = 200
 )
 
 // Load reads, expands, validates, and returns configuration from path.
@@ -38,7 +39,7 @@ func Load(path string) (configuration.Config, error) {
 		return configuration.Config{}, fmt.Errorf("prepare configuration: %w", err)
 	}
 
-	var result configuration.Config
+	result := configuration.Config{Defaults: configuration.Defaults{ThrottleMS: defaultThrottleMS}}
 	if err := json.Unmarshal(expanded, &result); err != nil {
 		return configuration.Config{}, fmt.Errorf("decode configuration: %w", err)
 	}

@@ -20,7 +20,8 @@
     "body_format": "rich",
     "deleted_status": "Done",
     "deleted_resolution": "Declined",
-    "assign_all_to_me": true
+    "assign_all_to_me": true,
+    "throttle_ms": 200
   },
 
   "projects": [

@@ -59,6 +59,7 @@ func buildService(config configuration.Config, project configuration.Project, li
 		TargetProject: project.JiraProject, TargetIssueType: project.JiraIssueType,
 		BodyFormat: config.Defaults.BodyFormat, DeletedStatus: config.Defaults.DeletedStatus,
 		DeletedResolution: config.Defaults.DeletedResolution,
+		Throttle:          time.Duration(config.Defaults.ThrottleMS) * time.Millisecond,
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},

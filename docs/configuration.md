@@ -15,7 +15,7 @@ with placeholder values only.
 {
   "jira":  { "base_url": "...", "cloud_id": "...", "email": "...", "auth_type": "basic", "token": "${JIRA_TOKEN}" },
   "plane": { "base_url": "...", "workspace": "...", "token": "${PLANE_TOKEN}" },
-  "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true },
+  "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true, "throttle_ms": 200 },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",
       "title_prefix": "[team]", "epic_key": "DST-100", "components": ["Backend"], "priority": "High", "status_map": { }, "status_group_map": { }, "resolution_map": { } }
@@ -42,6 +42,11 @@ the email must be empty.
 `defaults.assign_all_to_me` controls whether every created or updated target
 issue is assigned to the authenticating user. It defaults to `true` when
 omitted; set it to `false` to leave assignment unchanged.
+
+`defaults.throttle_ms` sets the context-aware delay between processed items in
+real runs. It defaults to 200 milliseconds and is skipped in dry-run mode and
+after the final item. Set it to `0` to disable throttling; negative values are
+rejected.
 
 `projects[].resolution_map` maps exact source state names to destination
 resolution names. `defaults.deleted_resolution` supplies the resolution used

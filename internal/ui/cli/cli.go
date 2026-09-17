@@ -86,6 +86,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 		mode = appsync.Reconcile
 	}
 	options := appsync.Options{Mode: mode, Since: since, DryRun: *dryRun, Limit: *limit}
+	options.OnItem = func(action appsync.Action) { printAction(stdout, action) }
 
 	projects, err := build(*configPath)
 	if err != nil {
@@ -128,15 +129,16 @@ func parseSince(value string, now time.Time) (time.Time, error) {
 }
 
 func printReport(output io.Writer, report appsync.Report) {
-	for _, action := range report.Actions {
-		key := action.Key
-		if key == "" {
-			key = "(new)"
-		}
-		fmt.Fprintf(output, "%s -> %s: %s\n", action.Reference, key, action.Kind)
-	}
 	fmt.Fprintf(output, "created=%d updated=%d status-set=%d deleted=%d skipped=%d\n",
 		report.Created, report.Updated, report.StatusSet, report.Deleted, report.Skipped)
+}
+
+func printAction(output io.Writer, action appsync.Action) {
+	key := action.Key
+	if key == "" {
+		key = "(new)"
+	}
+	fmt.Fprintf(output, "%s -> %s: %s\n", action.Reference, key, action.Kind)
 }
 
 func printRootUsage(output io.Writer) {

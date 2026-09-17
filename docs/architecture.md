@@ -21,7 +21,7 @@ standard library.
   typed config model).
 - `internal/infrastructure` — outbound adapters: `plane` (source client),
   `jira` (target client), `linkstore` (link-map persistence), `config` (loader),
-  and `httpbase` (shared base-URL guard).
+  and `httpbase` (shared base-URL guard and retry timing).
 
 ## Data flow
 

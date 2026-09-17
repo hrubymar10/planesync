@@ -51,7 +51,9 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 			Name: "SRC -> DST",
 			Run: func(_ context.Context, options appsync.Options) (appsync.Report, error) {
 				gotOptions = options
-				return appsync.Report{Created: 1, StatusSet: 1, Actions: []appsync.Action{{Kind: appsync.ActionCreated, SourceID: "source-item", Reference: "SRC-16"}}}, nil
+				action := appsync.Action{Kind: appsync.ActionCreated, SourceID: "source-item", Reference: "SRC-16"}
+				options.OnItem(action)
+				return appsync.Report{Created: 1, StatusSet: 1, Actions: []appsync.Action{action}}, nil
 			},
 		}}, nil
 	}
@@ -69,7 +71,7 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 	}
 }
 
-func TestPrintReportFormatsActionsBeforeSummary(t *testing.T) {
+func TestStreamingActionsPrecedeSummary(t *testing.T) {
 	report := appsync.Report{
 		Updated: 1, Deleted: 1,
 		Actions: []appsync.Action{
@@ -78,10 +80,29 @@ func TestPrintReportFormatsActionsBeforeSummary(t *testing.T) {
 		},
 	}
 	var output bytes.Buffer
+	for _, action := range report.Actions {
+		printAction(&output, action)
+	}
 	printReport(&output, report)
 	want := "SRC-16 -> CORE-4277: updated\nsource-id -> CORE-4278: deleted\ncreated=0 updated=1 status-set=0 deleted=1 skipped=0\n"
 	if output.String() != want {
 		t.Errorf("printReport() = %q, want %q", output.String(), want)
+	}
+}
+
+func TestRunKeepsStreamedOutputWhenServiceFails(t *testing.T) {
+	build := func(string) ([]Project, error) {
+		return []Project{{Name: "project", Run: func(_ context.Context, options appsync.Options) (appsync.Report, error) {
+			options.OnItem(appsync.Action{Kind: appsync.ActionUpdated, Reference: "SRC-16", Key: "CORE-4277"})
+			return appsync.Report{}, errors.New("later failure")
+		}}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"sync"}, build, &stdout, &stderr, time.Now); code != 1 {
+		t.Fatalf("run() exit = %d, want 1", code)
+	}
+	if stdout.String() != "SRC-16 -> CORE-4277: updated\n" || !strings.Contains(stderr.String(), "later failure") {
+		t.Errorf("stdout/stderr = %q / %q", stdout.String(), stderr.String())
 	}
 }
 

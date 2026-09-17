@@ -16,7 +16,11 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	links := &fakeLinks{links: map[string]string{}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
-	report, err := service.Run(context.Background(), Options{Mode: Incremental, Since: item.UpdatedAt.Add(-time.Hour)})
+	var streamed []Action
+	report, err := service.Run(context.Background(), Options{
+		Mode: Incremental, Since: item.UpdatedAt.Add(-time.Hour),
+		OnItem: func(action Action) { streamed = append(streamed, action) },
+	})
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
@@ -39,6 +43,9 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	wantAction := Action{Kind: ActionCreated, SourceID: "source-item", Reference: "SRC-16", Key: "created-key"}
 	if len(report.Actions) != 1 || report.Actions[0] != wantAction {
 		t.Errorf("actions = %#v, want %#v", report.Actions, wantAction)
+	}
+	if !reflect.DeepEqual(streamed, report.Actions) {
+		t.Errorf("streamed actions = %#v, report actions = %#v", streamed, report.Actions)
 	}
 }
 
@@ -181,6 +188,82 @@ func TestRunDryRunPerformsNoWrites(t *testing.T) {
 	}
 	if len(links.links) != 0 {
 		t.Errorf("dry run mutated links: %#v", links.links)
+	}
+}
+
+func TestRunThrottlesBetweenRealItemsOnly(t *testing.T) {
+	first := testItem()
+	second := testItem()
+	second.ID = "source-item-two"
+	second.Identifier = "SRC-17"
+	source := &fakeSource{changed: [][]Item{{first, second}}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]string{first.ID: "key-one", second.ID: "key-two"}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+	service.settings.Throttle = 25 * time.Millisecond
+	var waits []time.Duration
+	service.wait = func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	}
+
+	if _, err := service.Run(context.Background(), Options{Mode: Incremental}); err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if !reflect.DeepEqual(waits, []time.Duration{25 * time.Millisecond}) {
+		t.Errorf("waits = %v, want one inter-item wait", waits)
+	}
+
+	source.changed = [][]Item{{first, second}}
+	source.changedCalls = 0
+	waits = nil
+	if _, err := service.Run(context.Background(), Options{Mode: Incremental, DryRun: true}); err != nil {
+		t.Fatalf("dry-run Run(): %v", err)
+	}
+	if len(waits) != 0 {
+		t.Errorf("dry-run waits = %v, want none", waits)
+	}
+
+	fullSource := &fakeSource{listed: []Item{first}}
+	fullLinks := &fakeLinks{links: map[string]string{first.ID: "key-one", "missing-source": "missing-key"}}
+	fullService := testService(fullSource, &fakeTarget{}, fullLinks, mapResolver{"Started": "In Progress"})
+	fullService.settings.Throttle = 25 * time.Millisecond
+	waits = nil
+	fullService.wait = func(_ context.Context, delay time.Duration) error {
+		waits = append(waits, delay)
+		return nil
+	}
+	fullReport, err := fullService.Run(context.Background(), Options{Mode: Full})
+	if err != nil {
+		t.Fatalf("full Run(): %v", err)
+	}
+	if len(fullReport.Actions) != 2 || !reflect.DeepEqual(waits, []time.Duration{25 * time.Millisecond}) {
+		t.Errorf("full actions/waits = %#v / %v", fullReport.Actions, waits)
+	}
+}
+
+func TestRunThrottleHonorsContextCancellation(t *testing.T) {
+	first := testItem()
+	second := testItem()
+	second.ID = "source-item-two"
+	second.Identifier = "SRC-17"
+	source := &fakeSource{changed: [][]Item{{first, second}}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]string{first.ID: "key-one", second.ID: "key-two"}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+	service.settings.Throttle = time.Minute
+	ctx, cancel := context.WithCancel(context.Background())
+	service.wait = func(ctx context.Context, delay time.Duration) error {
+		cancel()
+		return waitContext(ctx, delay)
+	}
+
+	report, err := service.Run(ctx, Options{Mode: Incremental})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context cancellation", err)
+	}
+	if len(report.Actions) != 1 || len(target.updates) != 1 {
+		t.Errorf("partial report/updates = %#v / %#v", report, target.updates)
 	}
 }
 

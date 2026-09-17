@@ -37,6 +37,9 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Defaults.DeletedResolution; got != "Declined" {
 		t.Errorf("deleted resolution = %q", got)
 	}
+	if got := result.Defaults.ThrottleMS; got != 200 {
+		t.Errorf("throttle = %dms, want 200ms", got)
+	}
 	if got := result.Projects[0].ResolutionMap["Cancelled"]; got != "Declined" {
 		t.Errorf("resolution mapping = %q", got)
 	}
@@ -72,6 +75,9 @@ func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {
 	}
 	if got := result.Jira.BaseURL; got != "https://jira.example.com/path//segment" {
 		t.Errorf("Jira base URL = %q", got)
+	}
+	if got := result.Defaults.ThrottleMS; got != defaultThrottleMS {
+		t.Errorf("default throttle = %dms, want %dms", got, defaultThrottleMS)
 	}
 }
 
@@ -161,6 +167,18 @@ func TestLoadRejectsMissingToken(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, "projects[0].jira_token is required") || !strings.Contains(got, jiraTokenEnvironment) {
 		t.Errorf("Load() error = %q, want project field and environment hint", got)
+	}
+}
+
+func TestLoadAllowsZeroThrottle(t *testing.T) {
+	contents := validConfiguration(`"jira-token"`, `"plane-token"`, "", "", `"https://jira.example.com"`, `"[team]"`)
+	contents = strings.Replace(contents, `"body_format":"rich"`, `"body_format":"rich","throttle_ms":0`, 1)
+	result, err := Load(writeConfiguration(t, contents))
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if result.Defaults.ThrottleMS != 0 {
+		t.Errorf("throttle = %dms, want disabled", result.Defaults.ThrottleMS)
 	}
 }
 

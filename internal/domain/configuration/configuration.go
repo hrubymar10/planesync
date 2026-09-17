@@ -31,6 +31,7 @@ type Defaults struct {
 	DeletedStatus     string `json:"deleted_status,omitempty"`
 	DeletedResolution string `json:"deleted_resolution,omitempty"`
 	AssignAllToMe     *bool  `json:"assign_all_to_me,omitempty"`
+	ThrottleMS        int    `json:"throttle_ms,omitempty"`
 }
 
 // ShouldAssignAllToMe reports whether mirrored issues should be assigned to the authenticating user.
@@ -114,6 +115,9 @@ func (c Config) Validate() error {
 		problems = append(problems, "defaults.body_format is required")
 	default:
 		problems = append(problems, `defaults.body_format must be "rich" or "text"`)
+	}
+	if c.Defaults.ThrottleMS < 0 {
+		problems = append(problems, "defaults.throttle_ms must not be negative")
 	}
 
 	if len(c.Projects) == 0 {

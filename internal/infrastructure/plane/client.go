@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	defaultTimeout   = 30 * time.Second
-	maxResponseBytes = 8 << 20
-	maxErrorBytes    = 2 << 10
-	pageSize         = "100"
+	defaultTimeout     = 30 * time.Second
+	maxResponseBytes   = 8 << 20
+	maxErrorBytes      = 2 << 10
+	pageSize           = "100"
+	maxRequestAttempts = 5
 )
 
 // Item is a Plane work item used by the synchronization application.
@@ -46,6 +47,7 @@ type Client struct {
 	projectID  string
 	token      configuration.Secret
 	httpClient *http.Client
+	wait       func(context.Context, time.Duration) error
 }
 
 // String returns a diagnostic representation with the API token redacted.
@@ -94,6 +96,7 @@ func New(baseURL, workspace, projectID string, token configuration.Secret) (*Cli
 				return fmt.Errorf("redirects are not allowed")
 			},
 		},
+		wait: httpbase.Wait,
 	}, nil
 }
 
@@ -253,39 +256,55 @@ func (c *Client) get(ctx context.Context, resource, cursor string, destination a
 }
 
 func (c *Client) getURL(ctx context.Context, resource string, requestURL url.URL, destination any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
-	if err != nil {
-		return fmt.Errorf("create %s request: %w", resource, err)
-	}
-	request.Header.Set("X-API-Key", c.token.Reveal())
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("send %s request: %w", resource, err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorBytes))
-		if readErr != nil {
-			return fmt.Errorf("%s request returned HTTP %d (read error body: %v)", resource, response.StatusCode, readErr)
+	for attempt := 0; attempt < maxRequestAttempts; attempt++ {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
+		if err != nil {
+			return fmt.Errorf("create %s request: %w", resource, err)
 		}
-		if detail := strings.TrimSpace(string(snippet)); detail != "" {
-			return fmt.Errorf("%s request returned HTTP %d: %s", resource, response.StatusCode, detail)
+		request.Header.Set("X-API-Key", c.token.Reveal())
+
+		response, err := c.httpClient.Do(request)
+		if err != nil {
+			return fmt.Errorf("send %s request: %w", resource, err)
 		}
-		return fmt.Errorf("%s request returned HTTP %d", resource, response.StatusCode)
+		if response.StatusCode == http.StatusTooManyRequests && attempt+1 < maxRequestAttempts {
+			delay := httpbase.RetryDelay(response.Header.Get("Retry-After"), attempt, time.Now())
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maxErrorBytes))
+			_ = response.Body.Close()
+			wait := c.wait
+			if wait == nil {
+				wait = httpbase.Wait
+			}
+			if err := wait(ctx, delay); err != nil {
+				return fmt.Errorf("wait to retry %s request: %w", resource, err)
+			}
+			continue
+		}
+
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorBytes))
+			if readErr != nil {
+				return fmt.Errorf("%s request returned HTTP %d (read error body: %v)", resource, response.StatusCode, readErr)
+			}
+			if detail := strings.TrimSpace(string(snippet)); detail != "" {
+				return fmt.Errorf("%s request returned HTTP %d: %s", resource, response.StatusCode, detail)
+			}
+			return fmt.Errorf("%s request returned HTTP %d", resource, response.StatusCode)
+		}
+		body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+		if err != nil {
+			return fmt.Errorf("read %s response: %w", resource, err)
+		}
+		if len(body) > maxResponseBytes {
+			return fmt.Errorf("%s response exceeds %d bytes", resource, maxResponseBytes)
+		}
+		if err := json.Unmarshal(body, destination); err != nil {
+			return fmt.Errorf("decode %s response: %w", resource, err)
+		}
+		return nil
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
-	if err != nil {
-		return fmt.Errorf("read %s response: %w", resource, err)
-	}
-	if len(body) > maxResponseBytes {
-		return fmt.Errorf("%s response exceeds %d bytes", resource, maxResponseBytes)
-	}
-	if err := json.Unmarshal(body, destination); err != nil {
-		return fmt.Errorf("decode %s response: %w", resource, err)
-	}
-	return nil
+	return fmt.Errorf("%s request exhausted retries", resource)
 }
 
 func validatePathSegment(name, value string) error {
