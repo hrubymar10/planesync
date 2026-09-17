@@ -3,6 +3,8 @@
   "jira": {
     "base_url": "https://jira.example.com",
     "cloud_id": "example-cloud",
+    "email": "you@example.com",
+    "auth_type": "basic",
     "token": "${JIRA_TOKEN}",
   },
 

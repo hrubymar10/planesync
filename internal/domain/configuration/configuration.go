@@ -19,6 +19,8 @@ type Endpoint struct {
 	BaseURL   string `json:"base_url"`
 	CloudID   string `json:"cloud_id,omitempty"`
 	Workspace string `json:"workspace,omitempty"`
+	Email     string `json:"email,omitempty"`
+	AuthType  string `json:"auth_type,omitempty"`
 	Token     Secret `json:"token,omitempty"`
 }
 
@@ -79,6 +81,16 @@ func (c Config) Validate() error {
 
 	require("jira.base_url", c.Jira.BaseURL)
 	require("jira.cloud_id", c.Jira.CloudID)
+	switch strings.ToLower(strings.TrimSpace(c.Jira.AuthType)) {
+	case "", "basic":
+		require("jira.email", c.Jira.Email)
+	case "bearer":
+		if strings.TrimSpace(c.Jira.Email) != "" {
+			problems = append(problems, "jira.email must be empty when jira.auth_type is bearer")
+		}
+	default:
+		problems = append(problems, `jira.auth_type must be "basic" or "bearer"`)
+	}
 	require("plane.base_url", c.Plane.BaseURL)
 	require("plane.workspace", c.Plane.Workspace)
 	require("defaults.since", c.Defaults.Since)

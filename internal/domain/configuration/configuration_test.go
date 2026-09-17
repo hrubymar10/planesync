@@ -74,9 +74,46 @@ func TestValidateReportsRequiredFields(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() returned nil for empty configuration")
 	}
-	for _, field := range []string{"jira.base_url", "jira.cloud_id", "plane.base_url", "plane.workspace", "defaults.since", "defaults.body_format", "projects"} {
+	for _, field := range []string{"jira.base_url", "jira.cloud_id", "jira.email", "plane.base_url", "plane.workspace", "defaults.since", "defaults.body_format", "projects"} {
 		if !strings.Contains(err.Error(), field) {
 			t.Errorf("Validate() error %q does not mention %s", err, field)
 		}
+	}
+}
+
+func TestValidateJiraAuthentication(t *testing.T) {
+	valid := Config{
+		Jira:     Endpoint{BaseURL: "https://jira.example.com", CloudID: "example-cloud", Email: "you@example.com", Token: Secret("jira-token")},
+		Plane:    Endpoint{BaseURL: "https://api.plane.so", Workspace: "example-workspace", Token: Secret("plane-token")},
+		Defaults: Defaults{Since: "7d", BodyFormat: "rich"},
+		Projects: []Project{{PlaneProject: "SRC", JiraProject: "DST", JiraIssueType: "Task"}},
+	}
+
+	tests := []struct {
+		name     string
+		authType string
+		email    string
+		wantErr  string
+	}{
+		{name: "empty defaults to basic", email: "you@example.com"},
+		{name: "explicit basic", authType: "basic", email: "you@example.com"},
+		{name: "basic requires email", authType: "basic", wantErr: "jira.email is required"},
+		{name: "bearer accepts empty email", authType: "bearer"},
+		{name: "bearer rejects email", authType: "bearer", email: "you@example.com", wantErr: "jira.email must be empty"},
+		{name: "rejects unsupported type", authType: "other", wantErr: "jira.auth_type"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := valid
+			candidate.Jira.AuthType = test.authType
+			candidate.Jira.Email = test.email
+			err := candidate.Validate()
+			if test.wantErr == "" && err != nil {
+				t.Fatalf("Validate(): %v", err)
+			}
+			if test.wantErr != "" && (err == nil || !strings.Contains(err.Error(), test.wantErr)) {
+				t.Fatalf("Validate() error = %v, want %q", err, test.wantErr)
+			}
+		})
 	}
 }

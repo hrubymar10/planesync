@@ -25,12 +25,15 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Projects[0].PlaneToken.Reveal(); got != "plane-from-environment" {
 		t.Errorf("Plane token = %q, want environment value", got)
 	}
+	if got := result.Jira.AuthType; got != "basic" {
+		t.Errorf("Jira auth type = %q, want basic", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {
 	path := writeConfiguration(t, `{
 		// A URL containing comment-like characters must remain intact.
-		"jira": {"base_url": "https://jira.example.com/path//segment", "cloud_id": "example-cloud", "token": "jira-token",},
+		"jira": {"base_url": "https://jira.example.com/path//segment", "cloud_id": "example-cloud", "email": "you@example.com", "token": "jira-token",},
 		/* Block comments are accepted. */
 		"plane": {"base_url": "https://api.plane.so", "workspace": "example-workspace", "token": "plane-token",},
 		"defaults": {"since": "7d", "body_format": "rich",},
@@ -67,6 +70,9 @@ func TestLoadInterpolatesEnvironmentInAnyString(t *testing.T) {
 	}
 	if got := result.Projects[0].TitlePrefix; got != "[team]" {
 		t.Errorf("title prefix = %q", got)
+	}
+	if got := result.Jira.AuthType; got != "basic" {
+		t.Errorf("Jira auth type = %q, want default basic", got)
 	}
 }
 
@@ -154,7 +160,7 @@ func validConfiguration(jiraDefault, planeDefault, jiraOverride, planeOverride, 
 		return `,"` + name + `":` + value
 	}
 	return `{
-		"jira":{"base_url":` + jiraBaseURL + `,"cloud_id":"example-cloud"` + optional("token", jiraDefault) + `},
+		"jira":{"base_url":` + jiraBaseURL + `,"cloud_id":"example-cloud","email":"you@example.com"` + optional("token", jiraDefault) + `},
 		"plane":{"base_url":"https://api.plane.so","workspace":"example-workspace"` + optional("token", planeDefault) + `},
 		"defaults":{"since":"7d","body_format":"rich"},
 		"projects":[{

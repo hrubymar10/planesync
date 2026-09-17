@@ -42,6 +42,9 @@ func Load(path string) (configuration.Config, error) {
 	if err := json.Unmarshal(expanded, &result); err != nil {
 		return configuration.Config{}, fmt.Errorf("decode configuration: %w", err)
 	}
+	if strings.TrimSpace(result.Jira.AuthType) == "" {
+		result.Jira.AuthType = "basic"
+	}
 	if err := resolveTokens(&result); err != nil {
 		return configuration.Config{}, err
 	}
