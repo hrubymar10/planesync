@@ -1,0 +1,17 @@
+# Local configuration and synchronization state
+config/planesync.jsonc
+config/planesync-links.json
+
+# Go build and test output
+/planesync
+build/
+dist/
+*.test
+*.out
+coverage.out
+
+# Editors and operating systems
+*.DS_Store
+.idea/
+.vscode/
+*~
