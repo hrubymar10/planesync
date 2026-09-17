@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/hrubymar10/planesync/internal/domain/configuration"
+	"github.com/hrubymar10/planesync/internal/infrastructure/httpbase"
 )
 
 const (
@@ -62,8 +63,8 @@ func New(baseURL, cloudID, email, authType string, token configuration.Secret) (
 	if err != nil {
 		return nil, fmt.Errorf("parse Jira base URL: %w", err)
 	}
-	if parsed.Scheme != "https" || parsed.Host == "" {
-		return nil, fmt.Errorf("Jira base URL must use HTTPS and include a host")
+	if err := httpbase.Validate("Jira", parsed); err != nil {
+		return nil, err
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, fmt.Errorf("Jira base URL must not contain user info, a query, or a fragment")

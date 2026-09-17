@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hrubymar10/planesync/internal/domain/configuration"
+	"github.com/hrubymar10/planesync/internal/infrastructure/httpbase"
 )
 
 const (
@@ -64,8 +65,8 @@ func New(baseURL, workspace, projectID string, token configuration.Secret) (*Cli
 	if err != nil {
 		return nil, fmt.Errorf("parse Plane base URL: %w", err)
 	}
-	if parsed.Scheme != "https" || parsed.Host == "" {
-		return nil, fmt.Errorf("Plane base URL must use HTTPS and include a host")
+	if err := httpbase.Validate("Plane", parsed); err != nil {
+		return nil, err
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, fmt.Errorf("Plane base URL must not contain user info, a query, or a fragment")
