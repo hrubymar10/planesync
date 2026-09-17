@@ -29,10 +29,10 @@ type htmlNode struct {
 }
 
 // HTMLToADF converts a deterministic HTML subset to an ADF document.
-func HTMLToADF(bodyHTML, backLink string) json.RawMessage {
+func HTMLToADF(bodyHTML, reference string) json.RawMessage {
 	root := parseHTML(bodyHTML)
 	content := blocksFrom(root.children)
-	content = append(content, backLinkParagraph(strings.TrimSpace(backLink)))
+	content = append(content, referenceParagraph(strings.TrimSpace(reference)))
 	document := struct {
 		Version int       `json:"version"`
 		Type    string    `json:"type"`
@@ -367,16 +367,9 @@ func cloneMarks(marks []adfMark) []adfMark {
 	return append([]adfMark(nil), marks...)
 }
 
-func backLinkParagraph(backLink string) adfNode {
-	link := adfNode{Type: "text", Text: backLink}
-	if backLink != "" {
-		link.Marks = []adfMark{{Type: "link", Attrs: map[string]string{"href": backLink}}}
-	}
+func referenceParagraph(reference string) adfNode {
 	return adfNode{
-		Type: "paragraph",
-		Content: []adfNode{
-			{Type: "text", Text: "Mirrored from Plane: "},
-			link,
-		},
+		Type:    "paragraph",
+		Content: []adfNode{{Type: "text", Text: "Mirrored from Plane: " + reference}},
 	}
 }

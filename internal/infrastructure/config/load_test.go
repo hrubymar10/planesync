@@ -28,9 +28,6 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Jira.AuthType; got != "basic" {
 		t.Errorf("Jira auth type = %q, want basic", got)
 	}
-	if got := result.Plane.AppBaseURL; got != "https://app.plane.so" {
-		t.Errorf("Plane app base URL = %q", got)
-	}
 	if got := result.Projects[0].StatusGroupMap["started"]; got != "In Progress" {
 		t.Errorf("status group mapping = %q", got)
 	}

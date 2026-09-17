@@ -2,6 +2,7 @@ package factory
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	appsync "github.com/hrubymar10/planesync/internal/application/sync"
 	"github.com/hrubymar10/planesync/internal/infrastructure/jira"
+	"github.com/hrubymar10/planesync/internal/infrastructure/plane"
 )
 
 func TestBuildExampleConfiguration(t *testing.T) {
@@ -48,6 +50,31 @@ func TestTargetAdapterForwardsTargetFields(t *testing.T) {
 	}
 	if len(client.created.Components) != 1 || client.created.Components[0] != "Backend" || len(client.updated.Components) != 1 || client.updated.Components[0] != "Backend" {
 		t.Errorf("create/update components = %#v/%#v", client.created.Components, client.updated.Components)
+	}
+}
+
+func TestRenderBodyUsesPlainIdentifierFooter(t *testing.T) {
+	for _, format := range []string{"rich", "text"} {
+		t.Run(format, func(t *testing.T) {
+			encoded := renderBody(format, "<p>Body</p>", "SRC-16")
+			if !json.Valid(encoded) {
+				t.Fatalf("renderBody() returned invalid JSON: %s", encoded)
+			}
+			body := string(encoded)
+			if !strings.Contains(body, `"text":"Mirrored from Plane: SRC-16"`) {
+				t.Errorf("rendered body is missing plain identifier footer: %s", body)
+			}
+			if strings.Contains(body, `"marks"`) || strings.Contains(body, "https://") {
+				t.Errorf("rendered footer contains link data: %s", body)
+			}
+		})
+	}
+}
+
+func TestSourceItemsForwardsIdentifier(t *testing.T) {
+	items := sourceItems([]plane.Item{{ID: "source-id", Identifier: "SRC-16"}})
+	if len(items) != 1 || items[0].ID != "source-id" || items[0].Identifier != "SRC-16" {
+		t.Errorf("sourceItems() = %#v", items)
 	}
 }
 

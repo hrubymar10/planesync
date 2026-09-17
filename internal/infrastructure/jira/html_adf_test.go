@@ -7,7 +7,7 @@ import (
 )
 
 func TestHTMLToADFSupportedBlocks(t *testing.T) {
-	backLink := "https://plane.example.com/item"
+	reference := "SRC-16"
 	tests := []struct {
 		name     string
 		html     string
@@ -58,12 +58,12 @@ line two</code></pre>`, wantType: "codeBlock",
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			document := decodeADF(t, HTMLToADF(test.html, backLink))
+			document := decodeADF(t, HTMLToADF(test.html, reference))
 			if len(document.Content) != 2 || document.Content[0].Type != test.wantType {
 				t.Fatalf("document content = %#v", document.Content)
 			}
 			test.check(t, document.Content[0])
-			assertBackLink(t, document.Content[1], backLink)
+			assertReference(t, document.Content[1], reference)
 		})
 	}
 }
@@ -71,7 +71,7 @@ line two</code></pre>`, wantType: "codeBlock",
 func TestHTMLToADFInlineMarks(t *testing.T) {
 	document := decodeADF(t, HTMLToADF(
 		`<p><a href="https://example.com/?a=1&amp;b=2">Link</a> <strong>Strong</strong> <b>Bold</b> <em>Emphasis</em> <i>Italic</i> <code>Code</code></p>`,
-		"https://plane.example.com/item",
+		"SRC-16",
 	))
 	paragraph := document.Content[0]
 	wantMarks := []string{"link", "strong", "strong", "em", "em", "code"}
@@ -98,7 +98,7 @@ func TestHTMLToADFHeadingLevels(t *testing.T) {
 	for level := 1; level <= 6; level++ {
 		t.Run(fmt.Sprintf("h%d", level), func(t *testing.T) {
 			source := fmt.Sprintf("<h%d>Heading</h%d>", level, level)
-			document := decodeADF(t, HTMLToADF(source, "https://plane.example.com/item"))
+			document := decodeADF(t, HTMLToADF(source, "SRC-16"))
 			heading := document.Content[0]
 			if heading.Type != "heading" || heading.Attrs["level"] != float64(level) {
 				t.Errorf("heading = %#v", heading)
@@ -108,7 +108,7 @@ func TestHTMLToADFHeadingLevels(t *testing.T) {
 }
 
 func TestHTMLToADFUnknownTagDegradesToParagraph(t *testing.T) {
-	document := decodeADF(t, HTMLToADF(`<aside>Fallback <u>content</u></aside>`, "https://plane.example.com/item"))
+	document := decodeADF(t, HTMLToADF(`<aside>Fallback <u>content</u></aside>`, "SRC-16"))
 	if len(document.Content) != 2 || document.Content[0].Type != "paragraph" {
 		t.Fatalf("document content = %#v", document.Content)
 	}
@@ -119,7 +119,7 @@ func TestHTMLToADFUnknownTagDegradesToParagraph(t *testing.T) {
 
 func TestHTMLToADFAlwaysReturnsValidDocument(t *testing.T) {
 	for _, source := range []string{"", `<p>unclosed`, `<div title=">">Text &amp; more</div>`, `<p><!-- ignored -->Visible</p>`} {
-		encoded := HTMLToADF(source, "https://plane.example.com/item")
+		encoded := HTMLToADF(source, "SRC-16")
 		if !json.Valid(encoded) {
 			t.Errorf("HTMLToADF(%q) returned invalid JSON: %s", source, encoded)
 		}
@@ -147,14 +147,14 @@ func decodeADF(t *testing.T, encoded json.RawMessage) struct {
 	return document
 }
 
-func assertBackLink(t *testing.T, paragraph adfNode, backLink string) {
+func assertReference(t *testing.T, paragraph adfNode, reference string) {
 	t.Helper()
-	if paragraph.Type != "paragraph" || len(paragraph.Content) != 2 {
-		t.Fatalf("back-link paragraph = %#v", paragraph)
+	if paragraph.Type != "paragraph" || len(paragraph.Content) != 1 {
+		t.Fatalf("reference paragraph = %#v", paragraph)
 	}
-	link := paragraph.Content[1]
-	if link.Text != backLink || len(link.Marks) != 1 || link.Marks[0].Type != "link" || link.Marks[0].Attrs["href"] != backLink {
-		t.Errorf("back-link node = %#v", link)
+	text := paragraph.Content[0]
+	if text.Text != "Mirrored from Plane: "+reference || len(text.Marks) != 0 {
+		t.Errorf("reference node = %#v", text)
 	}
 }
 

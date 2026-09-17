@@ -14,6 +14,7 @@ import (
 // Item is the source work-item data required by synchronization.
 type Item struct {
 	ID         string
+	Identifier string
 	Title      string
 	BodyHTML   string
 	StateName  string
@@ -33,7 +34,7 @@ type CreateSpec struct {
 	IssueType  string
 	Summary    string
 	BodyHTML   string
-	BackLink   string
+	Reference  string
 	BodyFormat string
 	Labels     []string
 }
@@ -42,7 +43,7 @@ type CreateSpec struct {
 type UpdateSpec struct {
 	Summary    string
 	BodyHTML   string
-	BackLink   string
+	Reference  string
 	BodyFormat string
 }
 
@@ -68,9 +69,6 @@ type StatusResolver interface {
 // Settings configures one project synchronization service.
 type Settings struct {
 	TitlePrefix       string
-	AppBaseURL        string
-	Workspace         string
-	ProjectID         string
 	TargetProject     string
 	TargetIssueType   string
 	BodyFormat        string
@@ -206,7 +204,6 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 	}
 	key, resolution := linkmap.Decide(item.ID, linkmap.Hit{Key: mappedKey, OK: mapped}, linkmap.Hit{Key: labelKey, OK: labeled})
 	summary := mirror.Summary(s.settings.TitlePrefix, item.Title)
-	backLink := mirror.BackLink(s.settings.AppBaseURL, s.settings.Workspace, s.settings.ProjectID, item.ID)
 
 	switch resolution {
 	case linkmap.Create:
@@ -215,7 +212,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 		if !dryRun {
 			createdKey, err := s.target.Create(ctx, CreateSpec{
 				Project: s.settings.TargetProject, IssueType: s.settings.TargetIssueType,
-				Summary: summary, BodyHTML: item.BodyHTML, BackLink: backLink,
+				Summary: summary, BodyHTML: item.BodyHTML, Reference: item.Identifier,
 				BodyFormat: s.settings.BodyFormat, Labels: []string{label},
 			})
 			if err != nil {
@@ -232,7 +229,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionUpdate, SourceID: item.ID, Key: key, Detail: summary})
 		if !dryRun {
 			if err := s.target.Update(ctx, key, UpdateSpec{
-				Summary: summary, BodyHTML: item.BodyHTML, BackLink: backLink, BodyFormat: s.settings.BodyFormat,
+				Summary: summary, BodyHTML: item.BodyHTML, Reference: item.Identifier, BodyFormat: s.settings.BodyFormat,
 			}); err != nil {
 				return fmt.Errorf("update target %q for source item %q: %w", key, item.ID, err)
 			}

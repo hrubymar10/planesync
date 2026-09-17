@@ -14,7 +14,7 @@ with placeholder values only.
 ```jsonc
 {
   "jira":  { "base_url": "...", "cloud_id": "...", "email": "...", "auth_type": "basic", "token": "${JIRA_TOKEN}" },
-  "plane": { "base_url": "...", "workspace": "...", "app_base_url": "...", "token": "${PLANE_TOKEN}" },
+  "plane": { "base_url": "...", "workspace": "...", "token": "${PLANE_TOKEN}" },
   "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",

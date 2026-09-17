@@ -2,7 +2,6 @@ package mirror
 
 import (
 	"html"
-	"net/url"
 	"strings"
 	"unicode"
 )
@@ -17,17 +16,10 @@ func Label(planeID string) string {
 	return "plane-" + strings.TrimSpace(planeID)
 }
 
-// BackLink builds the Plane browser URL for a work item.
-func BackLink(appBaseURL, workspace, projectID, itemID string) string {
-	return strings.TrimRight(strings.TrimSpace(appBaseURL), "/") + "/" +
-		url.PathEscape(workspace) + "/projects/" + url.PathEscape(projectID) +
-		"/issues/" + url.PathEscape(itemID)
-}
-
-// PlainTextBody strips HTML and appends the source work item's browser link.
-func PlainTextBody(bodyHTML, backLink string) string {
+// PlainTextBody strips HTML and appends the source work item's human identifier.
+func PlainTextBody(bodyHTML, reference string) string {
 	body := stripHTML(bodyHTML)
-	footer := "Mirrored from Plane: " + strings.TrimSpace(backLink)
+	footer := "Mirrored from Plane: " + strings.TrimSpace(reference)
 	if body == "" {
 		return footer
 	}

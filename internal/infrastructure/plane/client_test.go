@@ -35,9 +35,14 @@ func TestChangedSinceIncludesBoundaryAndFollowsCursor(t *testing.T) {
 	boundary := time.Date(2026, time.September, 17, 10, 0, 0, 0, time.UTC)
 	var stateRequests atomic.Int32
 	var itemRequests atomic.Int32
+	var projectRequests atomic.Int32
 
 	client, server := newTestClient(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
+		case "/api/v1/workspaces/example-workspace/projects/example-project/":
+			projectRequests.Add(1)
+			assertProjectRequest(t, request)
+			writeJSON(writer, `{"identifier":"SRC"}`)
 		case "/api/v1/workspaces/example-workspace/projects/example-project/states/":
 			stateRequests.Add(1)
 			assertRequest(t, request, request.URL.Path, "")
@@ -50,8 +55,8 @@ func TestChangedSinceIncludesBoundaryAndFollowsCursor(t *testing.T) {
 					"next_cursor":"100:1:0",
 					"next_page_results":true,
 					"results":[
-						{"id":"before","name":"Before","description_html":"<p>before</p>","state":"state-one","updated_at":"2026-09-17T09:59:59Z"},
-						{"id":"boundary","name":"Boundary","description_html":"<p>boundary</p>","state":"state-one","updated_at":"2026-09-17T10:00:00Z"}
+						{"id":"before","sequence_id":15,"name":"Before","description_html":"<p>before</p>","state":"state-one","updated_at":"2026-09-17T09:59:59Z"},
+						{"id":"boundary","sequence_id":16,"name":"Boundary","description_html":"<p>boundary</p>","state":"state-one","updated_at":"2026-09-17T10:00:00Z"}
 					]
 				}`)
 				return
@@ -60,7 +65,7 @@ func TestChangedSinceIncludesBoundaryAndFollowsCursor(t *testing.T) {
 			writeJSON(writer, `{
 				"next_cursor":"",
 				"next_page_results":false,
-				"results":[{"id":"after","name":"After","description_html":"<p>after</p>","state":{"id":"state-one"},"updated_at":"2026-09-17T10:00:01Z"}]
+				"results":[{"id":"after","sequence_id":17,"name":"After","description_html":"<p>after</p>","state":{"id":"state-one"},"updated_at":"2026-09-17T10:00:01Z"}]
 			}`)
 		default:
 			http.NotFound(writer, request)
@@ -80,6 +85,12 @@ func TestChangedSinceIncludesBoundaryAndFollowsCursor(t *testing.T) {
 			t.Errorf("state join for %s = %q/%q", item.ID, item.StateName, item.StateGroup)
 		}
 	}
+	if items[0].Identifier != "SRC-16" || items[1].Identifier != "SRC-17" {
+		t.Errorf("identifiers = %q, %q", items[0].Identifier, items[1].Identifier)
+	}
+	if got := projectRequests.Load(); got != 1 {
+		t.Errorf("project requests = %d, want 1", got)
+	}
 	if got := stateRequests.Load(); got != 1 {
 		t.Errorf("state requests = %d, want 1", got)
 	}
@@ -91,10 +102,13 @@ func TestChangedSinceIncludesBoundaryAndFollowsCursor(t *testing.T) {
 func TestListReturnsFullJoinedItems(t *testing.T) {
 	client, server := newTestClient(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
+		case "/api/v1/workspaces/example-workspace/projects/example-project/":
+			assertProjectRequest(t, request)
+			writeJSON(writer, `{"identifier":"SRC"}`)
 		case "/api/v1/workspaces/example-workspace/projects/example-project/states/":
 			writeJSON(writer, `{"next_page_results":false,"results":[{"id":"state-done","name":"Done","group":"completed"}]}`)
 		case "/api/v1/workspaces/example-workspace/projects/example-project/work-items/":
-			writeJSON(writer, `{"next_page_results":false,"results":[{"id":"item-one","name":"A title","description_html":"<p>Body</p>","state":"state-done","updated_at":"2026-09-17T10:00:00Z"}]}`)
+			writeJSON(writer, `{"next_page_results":false,"results":[{"id":"item-one","sequence_id":16,"name":"A title","description_html":"<p>Body</p>","state":"state-done","updated_at":"2026-09-17T10:00:00Z"}]}`)
 		default:
 			http.NotFound(writer, request)
 		}
@@ -109,7 +123,7 @@ func TestListReturnsFullJoinedItems(t *testing.T) {
 		t.Fatalf("List() count = %d, want 1", len(items))
 	}
 	item := items[0]
-	if item.ID != "item-one" || item.Title != "A title" || item.BodyHTML != "<p>Body</p>" || item.StateName != "Done" || item.StateGroup != "completed" {
+	if item.ID != "item-one" || item.Identifier != "SRC-16" || item.Title != "A title" || item.BodyHTML != "<p>Body</p>" || item.StateName != "Done" || item.StateGroup != "completed" {
 		t.Errorf("List() item = %#v", item)
 	}
 }
@@ -208,6 +222,19 @@ func assertRequest(t *testing.T, request *http.Request, path, cursor string) {
 	}
 	if got := request.URL.Query().Get("cursor"); got != cursor {
 		t.Errorf("cursor = %q, want %q", got, cursor)
+	}
+}
+
+func assertProjectRequest(t *testing.T, request *http.Request) {
+	t.Helper()
+	if request.Method != http.MethodGet {
+		t.Errorf("method = %s, want GET", request.Method)
+	}
+	if got := request.Header.Get("X-API-Key"); got != testToken {
+		t.Errorf("X-API-Key header is missing or incorrect")
+	}
+	if request.URL.RawQuery != "" {
+		t.Errorf("project query = %q, want empty", request.URL.RawQuery)
 	}
 }
 

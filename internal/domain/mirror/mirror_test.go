@@ -28,25 +28,17 @@ func TestLabel(t *testing.T) {
 	}
 }
 
-func TestBackLink(t *testing.T) {
-	got := BackLink("https://app.plane.so/", "example workspace", "project/value", "item value")
-	want := "https://app.plane.so/example%20workspace/projects/project%2Fvalue/issues/item%20value"
-	if got != want {
-		t.Errorf("BackLink() = %q, want %q", got, want)
-	}
-}
-
 func TestPlainTextBody(t *testing.T) {
-	got := PlainTextBody(`<h2>Heading &amp; more</h2><p>Hello <strong>world</strong>.<br>Next line.</p>`, "https://plane.example.com/item")
-	want := "Heading & more\n\nHello world.\nNext line.\n\nMirrored from Plane: https://plane.example.com/item"
+	got := PlainTextBody(`<h2>Heading &amp; more</h2><p>Hello <strong>world</strong>.<br>Next line.</p>`, " SRC-16 ")
+	want := "Heading & more\n\nHello world.\nNext line.\n\nMirrored from Plane: SRC-16"
 	if got != want {
 		t.Errorf("PlainTextBody() = %q, want %q", got, want)
 	}
 }
 
 func TestPlainTextBodyWithoutHTML(t *testing.T) {
-	got := PlainTextBody("", "https://plane.example.com/item")
-	want := "Mirrored from Plane: https://plane.example.com/item"
+	got := PlainTextBody("", "SRC-16")
+	want := "Mirrored from Plane: SRC-16"
 	if got != want {
 		t.Errorf("PlainTextBody() = %q, want %q", got, want)
 	}

@@ -30,8 +30,8 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	if created.Project != "DST" || created.IssueType != "Task" || created.Summary != "[team] Example title" || created.Labels[0] != "plane-source-item" {
 		t.Errorf("create spec = %#v", created)
 	}
-	if created.BackLink != "https://app.plane.so/example-workspace/projects/source-project/issues/source-item" {
-		t.Errorf("back link = %q", created.BackLink)
+	if created.Reference != "SRC-16" {
+		t.Errorf("reference = %q", created.Reference)
 	}
 	if links.saved["source-item"] != "created-key" || links.saveCalls != 2 {
 		t.Errorf("saved links = %#v, calls = %d", links.saved, links.saveCalls)
@@ -48,7 +48,7 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if report.Updated != 1 || len(target.updates) != 1 || target.updates[0].key != "mapped-key" {
+	if report.Updated != 1 || len(target.updates) != 1 || target.updates[0].key != "mapped-key" || target.updates[0].spec.Reference != "SRC-16" {
 		t.Errorf("report/updates = %#v / %#v", report, target.updates)
 	}
 	if target.findCalls != 0 || len(target.creates) != 0 {
@@ -187,15 +187,14 @@ func TestRunDryRunPerformsNoWrites(t *testing.T) {
 
 func testItem() Item {
 	return Item{
-		ID: "source-item", Title: "Example title", BodyHTML: "<p>Body</p>",
+		ID: "source-item", Identifier: "SRC-16", Title: "Example title", BodyHTML: "<p>Body</p>",
 		StateName: "Started", StateGroup: "started", UpdatedAt: time.Date(2026, 9, 17, 10, 0, 0, 0, time.UTC),
 	}
 }
 
 func testService(source Source, target Target, links Links, resolver StatusResolver) *Service {
 	return New(source, target, links, resolver, Settings{
-		TitlePrefix: "[team]", AppBaseURL: "https://app.plane.so", Workspace: "example-workspace",
-		ProjectID: "source-project", TargetProject: "DST", TargetIssueType: "Task",
+		TitlePrefix: "[team]", TargetProject: "DST", TargetIssueType: "Task",
 		BodyFormat: "rich", DeletedStatus: "Removed", DeletedResolution: "Declined",
 	})
 }

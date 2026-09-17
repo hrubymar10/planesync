@@ -24,6 +24,7 @@ const (
 // Item is a Plane work item used by the synchronization application.
 type Item struct {
 	ID         string
+	Identifier string
 	Title      string
 	BodyHTML   string
 	StateName  string
@@ -123,6 +124,17 @@ func (c *Client) ChangedSince(ctx context.Context, since time.Time) ([]Item, err
 
 // List returns every work item in the configured project.
 func (c *Client) List(ctx context.Context) ([]Item, error) {
+	var project struct {
+		Identifier string `json:"identifier"`
+	}
+	if err := c.getProject(ctx, &project); err != nil {
+		return nil, fmt.Errorf("get Plane project: %w", err)
+	}
+	project.Identifier = strings.TrimSpace(project.Identifier)
+	if project.Identifier == "" {
+		return nil, fmt.Errorf("Plane project response is missing identifier")
+	}
+
 	states, err := c.States(ctx)
 	if err != nil {
 		return nil, err
@@ -145,6 +157,7 @@ func (c *Client) List(ctx context.Context) ([]Item, error) {
 		}
 		items = append(items, Item{
 			ID:         workItem.ID,
+			Identifier: fmt.Sprintf("%s-%d", project.Identifier, workItem.SequenceID),
 			Title:      workItem.Name,
 			BodyHTML:   workItem.DescriptionHTML,
 			StateName:  state.Name,
@@ -157,6 +170,7 @@ func (c *Client) List(ctx context.Context) ([]Item, error) {
 
 type workItem struct {
 	ID              string    `json:"id"`
+	SequenceID      int       `json:"sequence_id"`
 	Name            string    `json:"name"`
 	DescriptionHTML string    `json:"description_html"`
 	State           stateRef  `json:"state"`
@@ -215,6 +229,14 @@ func fetchPages[T any](ctx context.Context, client *Client, resource string) ([]
 	}
 }
 
+func (c *Client) getProject(ctx context.Context, destination any) error {
+	requestURL := *c.baseURL
+	requestURL.Path = strings.TrimRight(requestURL.Path, "/") +
+		"/api/v1/workspaces/" + c.workspace +
+		"/projects/" + c.projectID + "/"
+	return c.getURL(ctx, "project", requestURL, destination)
+}
+
 func (c *Client) get(ctx context.Context, resource, cursor string, destination any) error {
 	requestURL := *c.baseURL
 	requestURL.Path = strings.TrimRight(requestURL.Path, "/") +
@@ -227,7 +249,10 @@ func (c *Client) get(ctx context.Context, resource, cursor string, destination a
 		query.Set("cursor", cursor)
 	}
 	requestURL.RawQuery = query.Encode()
+	return c.getURL(ctx, resource, requestURL, destination)
+}
 
+func (c *Client) getURL(ctx context.Context, resource string, requestURL url.URL, destination any) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
 		return fmt.Errorf("create %s request: %w", resource, err)

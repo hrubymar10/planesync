@@ -11,8 +11,10 @@ is configured per project. An empty prefix yields the title unchanged.
 ## Body
 
 The destination description is Atlassian Document Format (ADF) and always ends
-with a `Mirrored from Plane: <url>` back-link to the source item. Two modes,
-selected by `defaults.body_format`:
+with `Mirrored from Plane: <identifier>`, where the identifier is the source
+item's human-readable project identifier and sequence number (for example,
+`SRC-16`). The footer is plain text, not a hyperlink. Two modes, selected by
+`defaults.body_format`:
 
 - `rich` — the source HTML is converted to ADF over a deterministic subset:
   paragraphs, line breaks, headings, ordered and bullet lists, links, and

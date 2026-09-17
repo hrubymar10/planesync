@@ -10,13 +10,16 @@ from the source tracker's public v1 API. It never writes.
   runs and for delete detection).
 - `ChangedSince(t)` — items updated at or after `t` (used by incremental runs).
 
-Each item exposes its id, title, HTML body, resolved state name and group, and
-update time. State name and group are joined from the states list.
+Each item exposes its id, human-readable identifier, title, HTML body, resolved
+state name and group, and update time. The adapter fetches the project once per
+synchronization run and combines its identifier prefix with each work item's
+`sequence_id` (for example, `SRC` and `16` become `SRC-16`). State name and
+group are joined from the states list.
 
 ## Transport
 
-Requests use the `X-API-Key` header, target the current `/work-items/` and
-`/states/` endpoints, and follow cursor pagination (`next_cursor` /
+Requests use the `X-API-Key` header, target the current project, `/work-items/`,
+and `/states/` endpoints, and follow cursor pagination (`next_cursor` /
 `next_page_results` / `results`) with loop protection. The base URL must be
 HTTPS; redirects are disabled, requests time out, and the response body is
 bounded. The token never appears in URLs, logs, or errors.

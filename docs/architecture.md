@@ -16,9 +16,9 @@ standard library.
   ports it needs (source, target, links, status resolver) and orchestrates a
   run. It imports only the domain and the standard library.
 - `internal/domain` — tracker-independent rules and models: `mirror` (summary,
-  label, back-link, plain-text body), `statusmap` (state-to-status resolution),
-  `linkmap` (map-then-label-then-create decision), and `configuration` (the
-  typed config model).
+  label, source-reference footer, plain-text body), `statusmap`
+  (state-to-status resolution), `linkmap` (map-then-label-then-create decision),
+  and `configuration` (the typed config model).
 - `internal/infrastructure` — outbound adapters: `plane` (source client),
   `jira` (target client), `linkstore` (link-map persistence), `config` (loader),
   and `httpbase` (shared base-URL guard).

@@ -16,13 +16,12 @@ type Config struct {
 
 // Endpoint describes a tracker API endpoint and its default token.
 type Endpoint struct {
-	BaseURL    string `json:"base_url"`
-	AppBaseURL string `json:"app_base_url,omitempty"`
-	CloudID    string `json:"cloud_id,omitempty"`
-	Workspace  string `json:"workspace,omitempty"`
-	Email      string `json:"email,omitempty"`
-	AuthType   string `json:"auth_type,omitempty"`
-	Token      Secret `json:"token,omitempty"`
+	BaseURL   string `json:"base_url"`
+	CloudID   string `json:"cloud_id,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Email     string `json:"email,omitempty"`
+	AuthType  string `json:"auth_type,omitempty"`
+	Token     Secret `json:"token,omitempty"`
 }
 
 // Defaults contains settings shared by all project mappings.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	appsync "github.com/hrubymar10/planesync/internal/application/sync"
@@ -55,13 +54,8 @@ func buildService(config configuration.Config, project configuration.Project, li
 			return nil, fmt.Errorf("resolve Jira assignee: %w", err)
 		}
 	}
-	appBaseURL := config.Plane.AppBaseURL
-	if strings.TrimSpace(appBaseURL) == "" {
-		appBaseURL = config.Plane.BaseURL
-	}
 	settings := appsync.Settings{
-		TitlePrefix: project.TitlePrefix, AppBaseURL: appBaseURL,
-		Workspace: config.Plane.Workspace, ProjectID: project.PlaneProject,
+		TitlePrefix:   project.TitlePrefix,
 		TargetProject: project.JiraProject, TargetIssueType: project.JiraIssueType,
 		BodyFormat: config.Defaults.BodyFormat, DeletedStatus: config.Defaults.DeletedStatus,
 		DeletedResolution: config.Defaults.DeletedResolution,
@@ -99,7 +93,7 @@ func sourceItems(items []plane.Item) []appsync.Item {
 	result := make([]appsync.Item, 0, len(items))
 	for _, item := range items {
 		result = append(result, appsync.Item{
-			ID: item.ID, Title: item.Title, BodyHTML: item.BodyHTML,
+			ID: item.ID, Identifier: item.Identifier, Title: item.Title, BodyHTML: item.BodyHTML,
 			StateName: item.StateName, StateGroup: item.StateGroup, UpdatedAt: item.UpdatedAt,
 		})
 	}
@@ -127,7 +121,7 @@ func (a targetAdapter) FindByLabel(ctx context.Context, label string) (string, b
 func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (string, error) {
 	return a.client.Create(ctx, jira.CreateInput{
 		Project: spec.Project, IssueType: spec.IssueType, Summary: spec.Summary,
-		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink), Labels: spec.Labels,
+		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.Reference), Labels: spec.Labels,
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
 		Components:        append([]string(nil), a.components...),
@@ -136,7 +130,7 @@ func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (str
 
 func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.UpdateSpec) error {
 	return a.client.Update(ctx, key, jira.UpdateInput{
-		Summary: spec.Summary, Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink),
+		Summary: spec.Summary, Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.Reference),
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
 		Components:        append([]string(nil), a.components...),
@@ -147,11 +141,11 @@ func (a targetAdapter) SetStatus(ctx context.Context, key, status, resolution st
 	return a.client.SetStatus(ctx, key, status, resolution)
 }
 
-func renderBody(format, bodyHTML, backLink string) []byte {
+func renderBody(format, bodyHTML, reference string) []byte {
 	if format == "rich" {
-		return jira.HTMLToADF(bodyHTML, backLink)
+		return jira.HTMLToADF(bodyHTML, reference)
 	}
-	return jira.TextToADF(mirror.PlainTextBody(bodyHTML, backLink))
+	return jira.TextToADF(mirror.PlainTextBody(bodyHTML, reference))
 }
 
 type linksAdapter struct {
