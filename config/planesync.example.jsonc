@@ -1,0 +1,34 @@
+{
+  // Jira is the destination tracker.
+  "jira": {
+    "base_url": "https://jira.example.com",
+    "cloud_id": "example-cloud",
+    "token": "${JIRA_TOKEN}",
+  },
+
+  // Plane is the source tracker.
+  "plane": {
+    "base_url": "https://api.plane.so",
+    "workspace": "example-workspace",
+    "token": "${PLANE_TOKEN}",
+  },
+
+  "defaults": {
+    "since": "7d",
+    "body_format": "rich",
+  },
+
+  "projects": [
+    {
+      "plane_project": "SRC",
+      "jira_project": "DST",
+      "jira_issue_type": "Task",
+      "title_prefix": "[team]",
+      "status_map": {
+        "Backlog": "To Do",
+        "Started": "In Progress",
+        "Completed": "Done",
+      },
+    },
+  ],
+}
