@@ -7,9 +7,11 @@ planesync is a deterministic Go command that mirrors a Plane tracker into Jira.
 ## Documentation discipline
 
 Before changing code, read the docs that touch it: [README.md](README.md), this
-file, and everything under `docs/`. When your change makes any of those drift
+file, and everything under [docs/](docs/) — including the architecture decision records in [docs/adr/](docs/adr/) and [docs/dependency-approvals.md](docs/dependency-approvals.md). When your change makes any of those drift
 from reality — flags, env vars, config keys, statuses, behaviour descriptions —
 update the docs **in the same commit**. Don't ship code changes and "fix the
+
+ADRs are immutable: don't edit a past decision, write a new ADR that supersedes it and flip the old one's status to `Superseded by ADR NNNN`.
 docs later".
 
 If while reading docs (or code) you spot something weird, wrong, or inconsistent
@@ -45,3 +47,7 @@ not acceptable when the diff changes behaviour, adds tests, or updates docs.
 - Body wrapped at roughly 72 characters explaining the **why**: failure mode,
   design choice, tradeoff, or scope boundary that justified the change.
 - Commit as the repository identity; do not add AI attribution or `Co-Authored-By` trailers.
+
+## Dependencies
+
+Do not add, remove, or update a third-party dependency without recorded maintainer approval. Append each approval to `docs/dependency-approvals.md` as required by ADR 0003.
