@@ -72,9 +72,8 @@ fi
 printf '%s\n' "$output"
 
 printf '%s\n' "$output" | grep -F 'created=1 updated=0 status-set=1 deleted=1 skipped=0' >/dev/null
-printf '%s\n' "$output" | grep -F 'create source=item-current' >/dev/null
-printf '%s\n' "$output" | grep -F 'set-status source=item-current' >/dev/null
-printf '%s\n' "$output" | grep -F 'delete source=item-missing target=archived-target detail="Archived"' >/dev/null
+printf '%s\n' "$output" | grep -F 'SRC-16 -> (new): created' >/dev/null
+printf '%s\n' "$output" | grep -F 'item-missing -> archived-target: deleted' >/dev/null
 
 if [ -s "$fixture_dir/violations" ]; then
 	echo "dry-run made forbidden writes:" >&2

@@ -36,6 +36,10 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	if links.saved["source-item"] != "created-key" || links.saveCalls != 2 {
 		t.Errorf("saved links = %#v, calls = %d", links.saved, links.saveCalls)
 	}
+	wantAction := Action{Kind: ActionCreated, SourceID: "source-item", Reference: "SRC-16", Key: "created-key"}
+	if len(report.Actions) != 1 || report.Actions[0] != wantAction {
+		t.Errorf("actions = %#v, want %#v", report.Actions, wantAction)
+	}
 }
 
 func TestRunUpdatesMappedItem(t *testing.T) {
@@ -56,6 +60,10 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	}
 	if len(target.statuses) != 1 || target.statuses[0].resolution != "Fixed" {
 		t.Errorf("status calls = %#v", target.statuses)
+	}
+	wantAction := Action{Kind: ActionUpdated, SourceID: "source-item", Reference: "SRC-16", Key: "mapped-key"}
+	if len(report.Actions) != 1 || report.Actions[0] != wantAction {
+		t.Errorf("actions = %#v, want %#v", report.Actions, wantAction)
 	}
 }
 
@@ -105,7 +113,7 @@ func TestRunSkipsUnmappedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if report.Skipped != 1 || report.StatusSet != 0 || len(report.Actions) != 1 || report.Actions[0].Kind != ActionSkipStatus || len(target.statuses) != 0 {
+	if report.Skipped != 1 || report.StatusSet != 0 || len(report.Actions) != 1 || report.Actions[0].Kind != ActionUpdated || report.Actions[0].Detail != "skipped status: Started" || len(target.statuses) != 0 {
 		t.Errorf("report/statuses = %#v / %#v", report, target.statuses)
 	}
 }
@@ -129,6 +137,30 @@ func TestRunFullReconcilesDeletedItem(t *testing.T) {
 	if len(links.saved) != 0 {
 		t.Errorf("saved links = %#v, want removed mapping", links.saved)
 	}
+	wantAction := Action{Kind: ActionDeleted, SourceID: "missing-source", Reference: "missing-source", Key: "target-key"}
+	if len(report.Actions) != 1 || report.Actions[0] != wantAction {
+		t.Errorf("actions = %#v, want %#v", report.Actions, wantAction)
+	}
+}
+
+func TestRunFullReportsSkippedDelete(t *testing.T) {
+	source := &fakeSource{listed: []Item{}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]string{"missing-source": "target-key"}}
+	service := testService(source, target, links, mapResolver{})
+	service.settings.DeletedStatus = ""
+
+	report, err := service.Run(context.Background(), Options{Mode: Full})
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	wantAction := Action{Kind: ActionSkipDelete, SourceID: "missing-source", Reference: "missing-source", Key: "target-key"}
+	if report.Skipped != 1 || report.Deleted != 0 || len(report.Actions) != 1 || report.Actions[0] != wantAction {
+		t.Errorf("report = %#v, want action %#v", report, wantAction)
+	}
+	if len(target.statuses) != 0 {
+		t.Errorf("status calls = %#v", target.statuses)
+	}
 }
 
 func TestRunDryRunPerformsNoWrites(t *testing.T) {
@@ -144,7 +176,7 @@ func TestRunDryRunPerformsNoWrites(t *testing.T) {
 	if len(target.creates) != 0 || len(target.updates) != 0 || len(target.statuses) != 0 || links.saveCalls != 0 {
 		t.Errorf("dry-run calls: target=%#v save=%d", target, links.saveCalls)
 	}
-	if report.Created != 1 || report.StatusSet != 1 || len(report.Actions) != 2 || report.Actions[0].Kind != ActionCreate || report.Actions[1].Kind != ActionSetStatus {
+	if report.Created != 1 || report.StatusSet != 1 || len(report.Actions) != 1 || report.Actions[0] != (Action{Kind: ActionCreated, SourceID: "source-item", Reference: "SRC-16"}) {
 		t.Errorf("dry-run report = %#v", report)
 	}
 	if len(links.links) != 0 {

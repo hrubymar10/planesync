@@ -51,7 +51,7 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 			Name: "SRC -> DST",
 			Run: func(_ context.Context, options appsync.Options) (appsync.Report, error) {
 				gotOptions = options
-				return appsync.Report{Created: 1, StatusSet: 1, Actions: []appsync.Action{{Kind: appsync.ActionCreate, SourceID: "source-item"}}}, nil
+				return appsync.Report{Created: 1, StatusSet: 1, Actions: []appsync.Action{{Kind: appsync.ActionCreated, SourceID: "source-item", Reference: "SRC-16"}}}, nil
 			},
 		}}, nil
 	}
@@ -64,8 +64,24 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 	if gotPath != "custom.jsonc" || gotOptions.Mode != appsync.Reconcile || !gotOptions.DryRun || !gotOptions.Since.Equal(now.Add(-12*time.Hour)) {
 		t.Errorf("path/options = %q / %#v", gotPath, gotOptions)
 	}
-	if output := stdout.String(); !strings.Contains(output, "created=1") || !strings.Contains(output, "create source=source-item") {
+	if output := stdout.String(); output != "SRC-16 -> (new): created\ncreated=1 updated=0 status-set=1 deleted=0 skipped=0\n" {
 		t.Errorf("stdout = %q", output)
+	}
+}
+
+func TestPrintReportFormatsActionsBeforeSummary(t *testing.T) {
+	report := appsync.Report{
+		Updated: 1, Deleted: 1,
+		Actions: []appsync.Action{
+			{Kind: appsync.ActionUpdated, Reference: "SRC-16", Key: "CORE-4277"},
+			{Kind: appsync.ActionDeleted, Reference: "source-id", Key: "CORE-4278"},
+		},
+	}
+	var output bytes.Buffer
+	printReport(&output, report)
+	want := "SRC-16 -> CORE-4277: updated\nsource-id -> CORE-4278: deleted\ncreated=0 updated=1 status-set=0 deleted=1 skipped=0\n"
+	if output.String() != want {
+		t.Errorf("printReport() = %q, want %q", output.String(), want)
 	}
 }
 

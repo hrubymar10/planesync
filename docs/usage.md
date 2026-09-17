@@ -43,8 +43,23 @@ planesync sync --full --dry-run      # preview a full backfill
 planesync sync                       # incremental, last 7 days
 ```
 
-Each configured project is processed in turn and a per-project report of counts
-(and, in dry-run, the planned actions) is printed.
+Each configured project is processed in turn. Every processed item prints one
+line with its source reference, destination key, and outcome, followed by a
+summary:
+
+```
+SRC-16 -> CORE-4277: updated
+SRC-17 -> CORE-4280: created
+created=1 updated=1 status-set=2 deleted=0 skipped=0
+```
+
+Dry-run output uses `(new)` as the destination key for pending creates:
+
+```
+SRC-17 -> (new): created
+created=1 updated=0 status-set=1 deleted=0 skipped=0
+```
+
 Use `--limit N` to process at most the first N source items, sorted by ID.
 The default `0` is unlimited. Limited runs disable delete reconciliation because
 unseen items may still exist outside the partial view.

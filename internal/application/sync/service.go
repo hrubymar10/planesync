@@ -94,24 +94,24 @@ type Options struct {
 	Limit  int
 }
 
-// ActionKind identifies a planned synchronization action.
+// ActionKind identifies a reported per-item outcome.
 type ActionKind string
 
 const (
-	ActionCreate     ActionKind = "create"
-	ActionUpdate     ActionKind = "update"
-	ActionSetStatus  ActionKind = "set-status"
-	ActionDelete     ActionKind = "delete"
-	ActionSkipStatus ActionKind = "skip-status"
+	ActionCreated    ActionKind = "created"
+	ActionUpdated    ActionKind = "updated"
+	ActionSkipped    ActionKind = "skipped"
+	ActionDeleted    ActionKind = "deleted"
 	ActionSkipDelete ActionKind = "skip-delete"
 )
 
-// Action describes an intended dry-run action or a skipped-action warning.
+// Action describes the outcome for one processed source item or missing link.
 type Action struct {
-	Kind     ActionKind
-	SourceID string
-	Key      string
-	Detail   string
+	Kind      ActionKind
+	SourceID  string
+	Reference string
+	Key       string
+	Detail    string
 }
 
 // Report summarizes a synchronization run.
@@ -192,11 +192,12 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 	mappedKey, mapped := links[item.ID]
 	key, resolution := linkmap.Decide(linkmap.Hit{Key: mappedKey, OK: mapped})
 	summary := mirror.Summary(s.settings.TitlePrefix, item.Title)
+	action := Action{SourceID: item.ID, Reference: item.Identifier}
 
 	switch resolution {
 	case linkmap.Create:
 		report.Created++
-		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionCreate, SourceID: item.ID, Detail: summary})
+		action.Kind = ActionCreated
 		if !dryRun {
 			createdKey, err := s.target.Create(ctx, CreateSpec{
 				Project: s.settings.TargetProject, IssueType: s.settings.TargetIssueType,
@@ -207,6 +208,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 				return fmt.Errorf("create target for source item %q: %w", item.ID, err)
 			}
 			key = createdKey
+			action.Key = key
 			links[item.ID] = key
 			if err := s.links.Save(links); err != nil {
 				return fmt.Errorf("save created link for source item %q: %w", item.ID, err)
@@ -214,7 +216,8 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 		}
 	case linkmap.Mapped:
 		report.Updated++
-		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionUpdate, SourceID: item.ID, Key: key, Detail: summary})
+		action.Kind = ActionUpdated
+		action.Key = key
 		if !dryRun {
 			if err := s.target.Update(ctx, key, UpdateSpec{
 				Summary: summary, BodyHTML: item.BodyHTML, Reference: item.Identifier, BodyFormat: s.settings.BodyFormat,
@@ -227,16 +230,17 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 	status, statusResolution, ok := s.resolver.Resolve(item.StateName, item.StateGroup)
 	if !ok {
 		report.Skipped++
-		report.Actions = append(report.Actions, Action{Kind: ActionSkipStatus, SourceID: item.ID, Key: key, Detail: item.StateName})
+		action.Detail = "skipped status: " + item.StateName
+		report.Actions = append(report.Actions, action)
 		return nil
 	}
 	report.StatusSet++
-	report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionSetStatus, SourceID: item.ID, Key: key, Detail: status})
 	if !dryRun {
 		if err := s.target.SetStatus(ctx, key, status, statusResolution); err != nil {
 			return fmt.Errorf("set target %q status for source item %q: %w", key, item.ID, err)
 		}
 	}
+	report.Actions = append(report.Actions, action)
 	return nil
 }
 
@@ -252,24 +256,17 @@ func (s *Service) reconcileDeleted(ctx context.Context, present map[string]struc
 		key := links[sourceID]
 		if s.settings.DeletedStatus == "" {
 			report.Skipped++
-			report.Actions = append(report.Actions, Action{Kind: ActionSkipDelete, SourceID: sourceID, Key: key})
+			report.Actions = append(report.Actions, Action{Kind: ActionSkipDelete, SourceID: sourceID, Reference: sourceID, Key: key})
 			continue
 		}
 		report.Deleted++
-		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionDelete, SourceID: sourceID, Key: key, Detail: s.settings.DeletedStatus})
 		if !dryRun {
 			if err := s.target.SetStatus(ctx, key, s.settings.DeletedStatus, s.settings.DeletedResolution); err != nil {
 				return fmt.Errorf("mark target %q deleted for missing source item %q: %w", key, sourceID, err)
 			}
 			delete(links, sourceID)
 		}
+		report.Actions = append(report.Actions, Action{Kind: ActionDeleted, SourceID: sourceID, Reference: sourceID, Key: key})
 	}
 	return nil
-}
-
-func appendDryRun(actions []Action, dryRun bool, action Action) []Action {
-	if dryRun {
-		return append(actions, action)
-	}
-	return actions
 }

@@ -98,7 +98,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 			fmt.Fprintf(stderr, "%s: sync failed: %v\n", project.Name, err)
 			return 1
 		}
-		printReport(stdout, project.Name, report, options.DryRun)
+		printReport(stdout, report)
 	}
 	return 0
 }
@@ -127,23 +127,16 @@ func parseSince(value string, now time.Time) (time.Time, error) {
 	return now.Add(-duration), nil
 }
 
-func printReport(output io.Writer, name string, report appsync.Report, dryRun bool) {
-	mode := "sync"
-	if dryRun {
-		mode = "dry-run"
-	}
-	fmt.Fprintf(output, "%s (%s): created=%d updated=%d status-set=%d deleted=%d skipped=%d\n",
-		name, mode, report.Created, report.Updated, report.StatusSet, report.Deleted, report.Skipped)
+func printReport(output io.Writer, report appsync.Report) {
 	for _, action := range report.Actions {
-		fmt.Fprintf(output, "  %s source=%s", action.Kind, action.SourceID)
-		if action.Key != "" {
-			fmt.Fprintf(output, " target=%s", action.Key)
+		key := action.Key
+		if key == "" {
+			key = "(new)"
 		}
-		if action.Detail != "" {
-			fmt.Fprintf(output, " detail=%q", action.Detail)
-		}
-		fmt.Fprintln(output)
+		fmt.Fprintf(output, "%s -> %s: %s\n", action.Reference, key, action.Kind)
 	}
+	fmt.Fprintf(output, "created=%d updated=%d status-set=%d deleted=%d skipped=%d\n",
+		report.Created, report.Updated, report.StatusSet, report.Deleted, report.Skipped)
 }
 
 func printRootUsage(output io.Writer) {
