@@ -53,6 +53,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 	dryRun := flags.Bool("dry-run", false, "show intended writes without applying them")
 	sinceValue := flags.String("since", "7d", "incremental window (Nd, Nh, or RFC3339)")
 	configPath := flags.String("config", defaultConfigPath, "configuration file path")
+	limit := flags.Int("limit", 0, "maximum source items to process (0 is unlimited)")
 	flags.Usage = func() { printSyncUsage(flags.Output()) }
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -68,6 +69,10 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 		fmt.Fprintf(stderr, "--full and --reconcile are mutually exclusive\n")
 		return 2
 	}
+	if *limit < 0 {
+		fmt.Fprintln(stderr, "--limit must not be negative")
+		return 2
+	}
 
 	since, err := parseSince(*sinceValue, now())
 	if err != nil {
@@ -80,7 +85,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 	} else if *reconcile {
 		mode = appsync.Reconcile
 	}
-	options := appsync.Options{Mode: mode, Since: since, DryRun: *dryRun}
+	options := appsync.Options{Mode: mode, Since: since, DryRun: *dryRun, Limit: *limit}
 
 	projects, err := build(*configPath)
 	if err != nil {

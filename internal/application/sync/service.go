@@ -95,6 +95,7 @@ type Options struct {
 	Mode   Mode
 	Since  time.Time
 	DryRun bool
+	Limit  int
 }
 
 // ActionKind identifies a planned synchronization action.
@@ -164,6 +165,12 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 	if err != nil {
 		return report, fmt.Errorf("list source items: %w", err)
 	}
+	if options.Limit > 0 {
+		sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+		if len(items) > options.Limit {
+			items = items[:options.Limit]
+		}
+	}
 
 	present := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -172,7 +179,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 			return report, err
 		}
 	}
-	if options.Mode == Full || options.Mode == Reconcile {
+	if options.Limit == 0 && (options.Mode == Full || options.Mode == Reconcile) {
 		if err := s.reconcileDeleted(ctx, present, links, options.DryRun, &report); err != nil {
 			return report, err
 		}

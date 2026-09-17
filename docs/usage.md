@@ -42,3 +42,6 @@ planesync sync                       # incremental, last 7 days
 
 Each configured project is processed in turn and a per-project report of counts
 (and, in dry-run, the planned actions) is printed.
+Use `--limit N` to process at most the first N source items, sorted by ID.
+The default `0` is unlimited. Limited runs disable delete reconciliation because
+unseen items may still exist outside the partial view.
