@@ -59,12 +59,12 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 		}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	exitCode := runWithoutLock([]string{"sync", "--reconcile", "--dry-run", "--since", "12h", "--config", "custom.jsonc"}, build, &stdout, &stderr, func() time.Time { return now })
+	exitCode := runWithoutLock([]string{"sync", "--reconcile", "--dry-run", "--force", "--since", "12h", "--config", "custom.jsonc"}, build, &stdout, &stderr, func() time.Time { return now })
 
 	if exitCode != 0 || stderr.Len() != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", exitCode, stderr.String())
 	}
-	if gotPath != "custom.jsonc" || gotOptions.Mode != appsync.Reconcile || !gotOptions.DryRun || !gotOptions.Since.Equal(now.Add(-12*time.Hour)) {
+	if gotPath != "custom.jsonc" || gotOptions.Mode != appsync.Reconcile || !gotOptions.DryRun || !gotOptions.Force || !gotOptions.Since.Equal(now.Add(-12*time.Hour)) {
 		t.Errorf("path/options = %q / %#v", gotPath, gotOptions)
 	}
 	if output := stdout.String(); output != "SRC-16 -> (new): created\ncreated=1 updated=0 unchanged=0 status-set=1 deleted=0 skipped=0\n" {

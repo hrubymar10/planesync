@@ -158,6 +158,37 @@ func TestRunSkipsUnchangedMappedItem(t *testing.T) {
 	}
 }
 
+func TestRunForceUpdatesMatchingMappedItem(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(map[bool]string{false: "real", true: "dry-run"}[dryRun], func(t *testing.T) {
+			item := testItem()
+			source := &fakeSource{changed: [][]Item{{item}}}
+			target := &fakeTarget{}
+			links := &fakeLinks{links: map[string]Entry{item.ID: {
+				Key: "mapped-key", UpdatedAt: item.UpdatedAt.Format(time.RFC3339), ConfigSalt: "test-salt",
+			}}}
+			service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+			report, err := service.Run(context.Background(), Options{Mode: Incremental, DryRun: dryRun, Force: true})
+			if err != nil {
+				t.Fatalf("Run(): %v", err)
+			}
+			if report.Updated != 1 || report.Unchanged != 0 || len(report.Actions) != 1 || report.Actions[0].Kind != ActionUpdated {
+				t.Errorf("report = %#v", report)
+			}
+			if dryRun {
+				if len(target.updates) != 0 || len(target.statuses) != 0 || links.saveCalls != 0 {
+					t.Errorf("dry-run writes = updates %d, statuses %d, saves %d", len(target.updates), len(target.statuses), links.saveCalls)
+				}
+				return
+			}
+			if len(target.updates) != 1 || len(target.statuses) != 1 || links.saveCalls != 1 {
+				t.Errorf("real writes = updates %d, statuses %d, saves %d", len(target.updates), len(target.statuses), links.saveCalls)
+			}
+		})
+	}
+}
+
 func TestRunChangedUpdatedAtOrSaltUpdatesMarkers(t *testing.T) {
 	item := testItem()
 	for _, test := range []struct {

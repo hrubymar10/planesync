@@ -10,7 +10,7 @@ use. Set `PLANESYNC_FORCE_BUILD=1` to force a rebuild.
 ## Command
 
 ```
-planesync sync [--full | --reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config <path>] [IDENTIFIER]
+planesync sync [--full | --reconcile] [--dry-run] [--force] [--since Nd|Nh|RFC3339] [--config <path>] [IDENTIFIER]
 ```
 
 With an identifier, for example `planesync sync SRC-123`, planesync reads the
@@ -26,6 +26,9 @@ with `--full` and `--reconcile`.
   to a window. Mutually exclusive with `--full`.
 - `--dry-run` — plan every create, update, status change, and delete, and print
   them, without performing a single write.
+- `--force` — bypass the unchanged-marker check and update every mapped item in
+  scope, including its status. With `--dry-run`, items are reported as
+  `updated` without performing writes.
 - `--since` — incremental window; `Nd` (days), `Nh` (hours), or an RFC3339
   timestamp. Default `1h`. Ignored by full, reconcile, and identifier modes.
 - `--config` — path to the config file (default `config/planesync.jsonc`).

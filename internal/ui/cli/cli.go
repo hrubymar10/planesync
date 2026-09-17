@@ -59,6 +59,7 @@ func runWithLock(args []string, build Builder, stdout, stderr io.Writer, now fun
 	full := flags.Bool("full", false, "sync the full source set")
 	reconcile := flags.Bool("reconcile", false, "sync the full set and reconcile missing items")
 	dryRun := flags.Bool("dry-run", false, "show intended writes without applying them")
+	force := flags.Bool("force", false, "update mapped items even when synchronization markers match")
 	sinceValue := flags.String("since", "1h", "incremental window (Nd, Nh, or RFC3339)")
 	configPath := flags.String("config", defaultConfigPath, "configuration file path")
 	limit := flags.Int("limit", 0, "maximum source items to process (0 is unlimited)")
@@ -105,7 +106,7 @@ func runWithLock(args []string, build Builder, stdout, stderr io.Writer, now fun
 	} else if *reconcile {
 		mode = appsync.Reconcile
 	}
-	options := appsync.Options{Mode: mode, Since: since, Identifier: identifier, DryRun: *dryRun, Limit: *limit}
+	options := appsync.Options{Mode: mode, Since: since, Identifier: identifier, DryRun: *dryRun, Force: *force, Limit: *limit}
 	options.OnItem = func(action appsync.Action) { printAction(stdout, action) }
 
 	projects, err := build(*configPath)
@@ -176,5 +177,5 @@ func printRootUsage(output io.Writer) {
 }
 
 func printSyncUsage(output io.Writer) {
-	fmt.Fprintln(output, "Usage: planesync sync [--full|--reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config path] [identifier]")
+	fmt.Fprintln(output, "Usage: planesync sync [--full|--reconcile] [--dry-run] [--force] [--since Nd|Nh|RFC3339] [--config path] [identifier]")
 }

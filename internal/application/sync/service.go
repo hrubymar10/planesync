@@ -101,6 +101,7 @@ type Options struct {
 	Since      time.Time
 	Identifier string
 	DryRun     bool
+	Force      bool
 	Limit      int
 	// OnItem receives each outcome synchronously as its item finishes.
 	OnItem func(Action)
@@ -228,7 +229,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 
 	linksChanged := false
 	for _, item := range items {
-		changed, err := s.syncItem(ctx, item, links, options.DryRun, emit, &report)
+		changed, err := s.syncItem(ctx, item, links, options.DryRun, options.Force, emit, &report)
 		if err != nil {
 			return report, err
 		}
@@ -249,7 +250,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 	return report, nil
 }
 
-func (s *Service) syncItem(ctx context.Context, item Item, links map[string]Entry, dryRun bool, emit func(Action) error, report *Report) (bool, error) {
+func (s *Service) syncItem(ctx context.Context, item Item, links map[string]Entry, dryRun, force bool, emit func(Action) error, report *Report) (bool, error) {
 	link, mapped := links[item.ID]
 	key, resolution := linkmap.Decide(linkmap.Hit{Key: link.Key, OK: mapped})
 	summary := mirror.Summary(s.settings.TitlePrefix, item.Title)
@@ -257,7 +258,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]Entr
 	status, statusResolution, statusMapped := s.resolver.Resolve(item.StateName, item.StateGroup)
 	updatedAt := item.UpdatedAt.UTC().Format(time.RFC3339Nano)
 
-	if mapped && link.UpdatedAt == updatedAt && link.ConfigSalt == s.settings.ContentSalt {
+	if mapped && !force && link.UpdatedAt == updatedAt && link.ConfigSalt == s.settings.ContentSalt {
 		report.Unchanged++
 		action.Kind = ActionUnchanged
 		action.Key = key
