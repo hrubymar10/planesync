@@ -4,7 +4,7 @@ config/planesync-links.json
 
 # Go build and test output
 /planesync
-bin/planesync
+/planesync-*
 build/
 dist/
 *.test

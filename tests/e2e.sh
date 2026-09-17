@@ -2,6 +2,11 @@
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+binary_path=${PLANESYNC_E2E_BINARY:-${1:-}}
+if [ -z "$binary_path" ] || [ ! -x "$binary_path" ]; then
+	echo "usage: PLANESYNC_E2E_BINARY=/path/to/planesync $0" >&2
+	exit 2
+fi
 fixture_dir=$(mktemp -d "${TMPDIR:-/tmp}/planesync-e2e.XXXXXX")
 server_pid=
 
@@ -60,7 +65,7 @@ cat > "$fixture_dir/config/planesync.jsonc" <<EOF
 }
 EOF
 
-if ! output=$(PLANESYNC_ALLOW_INSECURE_BASE_URLS=1 "$repo_dir/bin/planesync" sync --full --dry-run --config "$fixture_dir/config/planesync.jsonc" 2>&1); then
+if ! output=$(PLANESYNC_ALLOW_INSECURE_BASE_URLS=1 "$binary_path" sync --full --dry-run --config "$fixture_dir/config/planesync.jsonc" 2>&1); then
 	printf '%s\n' "$output" >&2
 	exit 1
 fi

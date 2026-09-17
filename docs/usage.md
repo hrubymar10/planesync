@@ -4,6 +4,9 @@ planesync is a non-interactive, on-demand CLI. It performs a one-way mirror from
 the source tracker to the destination; the destination is a read-only
 reflection.
 
+Run `bin/planesync`; it builds a cached binary for the current platform on first
+use. Set `PLANESYNC_FORCE_BUILD=1` to force a rebuild.
+
 ## Command
 
 ```
