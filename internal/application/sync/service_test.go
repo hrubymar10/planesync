@@ -74,6 +74,45 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	}
 }
 
+func TestRunIdentifierProcessesOnlyExactMatchWithoutReconciliation(t *testing.T) {
+	first := testItem()
+	second := testItem()
+	second.ID = "source-item-two"
+	second.Identifier = "SRC-17"
+	source := &fakeSource{listed: []Item{first, second}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]Entry{
+		first.ID:       {Key: "key-one"},
+		second.ID:      {Key: "key-two"},
+		"missing-item": {Key: "missing-key"},
+	}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+	report, err := service.Run(context.Background(), Options{Mode: Incremental, Identifier: "SRC-17"})
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if source.listCalls != 1 || source.changedCalls != 0 {
+		t.Errorf("source calls = list %d, changed %d", source.listCalls, source.changedCalls)
+	}
+	if report.Updated != 1 || report.Deleted != 0 || len(target.updates) != 1 || target.updates[0].key != "key-two" {
+		t.Errorf("report/updates = %#v / %#v", report, target.updates)
+	}
+	if _, exists := links.links["missing-item"]; !exists {
+		t.Error("identifier run unexpectedly reconciled a missing item")
+	}
+}
+
+func TestRunIdentifierReturnsClearErrorWhenNotFound(t *testing.T) {
+	source := &fakeSource{listed: []Item{testItem()}}
+	service := testService(source, &fakeTarget{}, &fakeLinks{links: map[string]Entry{}}, mapResolver{})
+
+	_, err := service.Run(context.Background(), Options{Identifier: "src-16"})
+	if err == nil || !strings.Contains(err.Error(), `no source item with identifier "src-16"`) {
+		t.Fatalf("Run() error = %v, want case-sensitive not-found error", err)
+	}
+}
+
 func TestRunLegacyEntryResynchronizesOnce(t *testing.T) {
 	item := testItem()
 	source := &fakeSource{changed: [][]Item{{item}, {item}}}

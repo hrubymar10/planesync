@@ -97,10 +97,11 @@ const (
 
 // Options controls one synchronization run.
 type Options struct {
-	Mode   Mode
-	Since  time.Time
-	DryRun bool
-	Limit  int
+	Mode       Mode
+	Since      time.Time
+	Identifier string
+	DryRun     bool
+	Limit      int
 	// OnItem receives each outcome synchronously as its item finishes.
 	OnItem func(Action)
 }
@@ -164,16 +165,31 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 	}
 
 	var items []Item
-	switch options.Mode {
-	case Incremental:
+	switch {
+	case options.Identifier != "":
+		items, err = s.source.List(ctx)
+	case options.Mode == Incremental:
 		items, err = s.source.ChangedSince(ctx, options.Since)
-	case Full, Reconcile:
+	case options.Mode == Full || options.Mode == Reconcile:
 		items, err = s.source.List(ctx)
 	default:
 		return report, fmt.Errorf("unsupported sync mode %d", options.Mode)
 	}
 	if err != nil {
 		return report, fmt.Errorf("list source items: %w", err)
+	}
+	if options.Identifier != "" {
+		var matched *Item
+		for index := range items {
+			if items[index].Identifier == options.Identifier {
+				matched = &items[index]
+				break
+			}
+		}
+		if matched == nil {
+			return report, fmt.Errorf("no source item with identifier %q", options.Identifier)
+		}
+		items = []Item{*matched}
 	}
 	if options.Limit > 0 {
 		sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
@@ -187,7 +203,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 		present[item.ID] = struct{}{}
 	}
 	var missing []string
-	if options.Limit == 0 && (options.Mode == Full || options.Mode == Reconcile) {
+	if options.Identifier == "" && options.Limit == 0 && (options.Mode == Full || options.Mode == Reconcile) {
 		missing = missingSourceIDs(present, links)
 	}
 	remaining := len(items) + len(missing)

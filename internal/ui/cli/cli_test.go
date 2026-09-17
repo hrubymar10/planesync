@@ -71,6 +71,41 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 	}
 }
 
+func TestRunDefaultsToOneHourWindow(t *testing.T) {
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	var got appsync.Options
+	build := func(string) ([]Project, error) {
+		return []Project{{Name: "project", Run: func(_ context.Context, options appsync.Options) (appsync.Report, error) {
+			got = options
+			return appsync.Report{}, nil
+		}}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"sync"}, build, &stdout, &stderr, func() time.Time { return now }); code != 0 {
+		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
+	}
+	if !got.Since.Equal(now.Add(-time.Hour)) {
+		t.Errorf("default since = %v, want %v", got.Since, now.Add(-time.Hour))
+	}
+}
+
+func TestRunAcceptsIdentifierAndIgnoresSince(t *testing.T) {
+	var got appsync.Options
+	build := func(string) ([]Project, error) {
+		return []Project{{Name: "project", Run: func(_ context.Context, options appsync.Options) (appsync.Report, error) {
+			got = options
+			return appsync.Report{}, nil
+		}}}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"sync", "--since", "not-a-window", "SRC-123"}, build, &stdout, &stderr, time.Now); code != 0 {
+		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
+	}
+	if got.Identifier != "SRC-123" || !got.Since.IsZero() {
+		t.Errorf("options = %#v", got)
+	}
+}
+
 func TestStreamingActionsPrecedeSummary(t *testing.T) {
 	report := appsync.Report{
 		Updated: 1, Deleted: 1,
@@ -117,6 +152,9 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "unknown command", args: []string{"other"}, wantCode: 2, wantError: "unknown command"},
 		{name: "invalid since", args: []string{"sync", "--since", "bad"}, wantCode: 2, wantError: "invalid --since"},
 		{name: "conflicting modes", args: []string{"sync", "--full", "--reconcile"}, wantCode: 2, wantError: "mutually exclusive"},
+		{name: "identifier with full", args: []string{"sync", "--full", "SRC-123"}, wantCode: 2, wantError: "mutually exclusive"},
+		{name: "identifier with reconcile", args: []string{"sync", "--reconcile", "SRC-123"}, wantCode: 2, wantError: "mutually exclusive"},
+		{name: "too many identifiers", args: []string{"sync", "SRC-123", "SRC-124"}, wantCode: 2, wantError: "at most one"},
 		{
 			name: "builder failure", args: []string{"sync"}, wantCode: 1, wantError: "configuration error",
 			build: func(string) ([]Project, error) { return nil, errors.New("unavailable") },

@@ -10,8 +10,13 @@ use. Set `PLANESYNC_FORCE_BUILD=1` to force a rebuild.
 ## Command
 
 ```
-planesync sync [--full | --reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config <path>]
+planesync sync [--full | --reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config <path>] [IDENTIFIER]
 ```
+
+With an identifier, for example `planesync sync SRC-123`, planesync reads the
+full source project and mirrors only the item whose Plane identifier exactly
+matches. Identifier mode does not reconcile deletes and is mutually exclusive
+with `--full` and `--reconcile`.
 
 ## Flags
 
@@ -22,12 +27,14 @@ planesync sync [--full | --reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--con
 - `--dry-run` — plan every create, update, status change, and delete, and print
   them, without performing a single write.
 - `--since` — incremental window; `Nd` (days), `Nh` (hours), or an RFC3339
-  timestamp. Default `7d`. Ignored by full and reconcile modes.
+  timestamp. Default `1h`. Ignored by full, reconcile, and identifier modes.
 - `--config` — path to the config file (default `config/planesync.jsonc`).
 
 ## Modes
 
 - Incremental (default) — mirrors items changed within the window.
+- Identifier — mirrors one exact, case-sensitive Plane identifier from the full
+  source set without reconciling deletes.
 - Full — mirrors everything and reconciles deletes.
 - Reconcile — reconciles deletes over the full set.
 
@@ -40,7 +47,8 @@ planesync sync [--full | --reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--con
 ```
 export JIRA_TOKEN=... PLANE_TOKEN=...
 planesync sync --full --dry-run      # preview a full backfill
-planesync sync                       # incremental, last 7 days
+planesync sync                       # incremental, last 1 hour
+planesync sync SRC-123               # mirror one exact Plane identifier
 ```
 
 Each configured project is processed in turn. Every processed item streams one

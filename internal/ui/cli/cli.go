@@ -51,7 +51,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 	full := flags.Bool("full", false, "sync the full source set")
 	reconcile := flags.Bool("reconcile", false, "sync the full set and reconcile missing items")
 	dryRun := flags.Bool("dry-run", false, "show intended writes without applying them")
-	sinceValue := flags.String("since", "7d", "incremental window (Nd, Nh, or RFC3339)")
+	sinceValue := flags.String("since", "1h", "incremental window (Nd, Nh, or RFC3339)")
 	configPath := flags.String("config", defaultConfigPath, "configuration file path")
 	limit := flags.Int("limit", 0, "maximum source items to process (0 is unlimited)")
 	flags.Usage = func() { printSyncUsage(flags.Output()) }
@@ -61,12 +61,20 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 		}
 		return 2
 	}
-	if flags.NArg() != 0 {
-		fmt.Fprintf(stderr, "sync does not accept positional arguments\n")
+	if flags.NArg() > 1 {
+		fmt.Fprintln(stderr, "sync accepts at most one Plane identifier")
 		return 2
+	}
+	identifier := ""
+	if flags.NArg() == 1 {
+		identifier = flags.Arg(0)
 	}
 	if *full && *reconcile {
 		fmt.Fprintf(stderr, "--full and --reconcile are mutually exclusive\n")
+		return 2
+	}
+	if identifier != "" && (*full || *reconcile) {
+		fmt.Fprintln(stderr, "a Plane identifier is mutually exclusive with --full and --reconcile")
 		return 2
 	}
 	if *limit < 0 {
@@ -74,10 +82,14 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 		return 2
 	}
 
-	since, err := parseSince(*sinceValue, now())
-	if err != nil {
-		fmt.Fprintf(stderr, "invalid --since: %v\n", err)
-		return 2
+	var since time.Time
+	if identifier == "" {
+		var err error
+		since, err = parseSince(*sinceValue, now())
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid --since: %v\n", err)
+			return 2
+		}
 	}
 	mode := appsync.Incremental
 	if *full {
@@ -85,7 +97,7 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 	} else if *reconcile {
 		mode = appsync.Reconcile
 	}
-	options := appsync.Options{Mode: mode, Since: since, DryRun: *dryRun, Limit: *limit}
+	options := appsync.Options{Mode: mode, Since: since, Identifier: identifier, DryRun: *dryRun, Limit: *limit}
 	options.OnItem = func(action appsync.Action) { printAction(stdout, action) }
 
 	projects, err := build(*configPath)
@@ -147,5 +159,5 @@ func printRootUsage(output io.Writer) {
 }
 
 func printSyncUsage(output io.Writer) {
-	fmt.Fprintln(output, "Usage: planesync sync [--full|--reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config path]")
+	fmt.Fprintln(output, "Usage: planesync sync [--full|--reconcile] [--dry-run] [--since Nd|Nh|RFC3339] [--config path] [identifier]")
 }
