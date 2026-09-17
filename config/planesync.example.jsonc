@@ -5,7 +5,7 @@
     "cloud_id": "example-cloud",
     "email": "you@example.com",
     "auth_type": "basic",
-    "token": "${JIRA_TOKEN}",
+    "token": "${JIRA_TOKEN}"
   },
 
   // Plane is the source tracker.
@@ -13,7 +13,7 @@
     "base_url": "https://api.plane.so",
     "app_base_url": "https://app.plane.so",
     "workspace": "example-workspace",
-    "token": "${PLANE_TOKEN}",
+    "token": "${PLANE_TOKEN}"
   },
 
   "defaults": {
@@ -21,7 +21,7 @@
     "body_format": "rich",
     "deleted_status": "Done",
     "deleted_resolution": "Declined",
-    "assign_all_to_me": true,
+    "assign_all_to_me": true
   },
 
   "projects": [
@@ -29,22 +29,22 @@
       "plane_project": "SRC",
       "jira_project": "DST",
       "jira_issue_type": "Task",
-	  "epic_key": "DST-100",
+      "epic_key": "DST-100",
       "title_prefix": "[team]",
       "status_map": {
         "Backlog": "To Do",
         "Started": "In Progress",
-        "Completed": "Done",
+        "Completed": "Done"
       },
       "status_group_map": {
         "backlog": "To Do",
         "started": "In Progress",
-        "completed": "Done",
+        "completed": "Done"
       },
       "resolution_map": {
         "Completed": "Done",
-        "Cancelled": "Declined",
-      },
-    },
-  ],
+        "Cancelled": "Declined"
+      }
+    }
+  ]
 }
