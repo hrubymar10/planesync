@@ -135,15 +135,19 @@ func TestNewSetsRequestTimeout(t *testing.T) {
 }
 
 func TestErrorsAndFormattingNeverRevealToken(t *testing.T) {
+	const detail = `{"detail":"permission denied"}`
 	client, server := newTestClient(t, http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte(testToken))
+		_, _ = writer.Write([]byte(detail + strings.Repeat("x", maxErrorBytes)))
 	}))
 	defer server.Close()
 
 	_, err := client.States(context.Background())
 	if err == nil {
 		t.Fatal("States() returned nil error")
+	}
+	if !strings.Contains(err.Error(), detail) || len(err.Error()) > maxErrorBytes+200 {
+		t.Errorf("error did not contain a bounded response body: %v", err)
 	}
 	for _, output := range []string{err.Error(), fmt.Sprint(client), fmt.Sprintf("%+v", client), fmt.Sprintf("%#v", client)} {
 		if strings.Contains(output, testToken) {

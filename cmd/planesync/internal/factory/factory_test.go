@@ -34,9 +34,9 @@ func TestBuildExampleConfiguration(t *testing.T) {
 	}
 }
 
-func TestTargetAdapterForwardsEpicKey(t *testing.T) {
+func TestTargetAdapterForwardsTargetFields(t *testing.T) {
 	client := &fakeJiraTarget{}
-	adapter := targetAdapter{client: client, parentEpicKey: "epic-parent"}
+	adapter := targetAdapter{client: client, parentEpicKey: "epic-parent", components: []string{"Backend"}}
 	if _, err := adapter.Create(context.Background(), appsync.CreateSpec{}); err != nil {
 		t.Fatalf("Create(): %v", err)
 	}
@@ -45,6 +45,9 @@ func TestTargetAdapterForwardsEpicKey(t *testing.T) {
 	}
 	if client.created.ParentEpicKey != "epic-parent" || client.updated.ParentEpicKey != "epic-parent" {
 		t.Errorf("create/update epic keys = %q/%q", client.created.ParentEpicKey, client.updated.ParentEpicKey)
+	}
+	if len(client.created.Components) != 1 || client.created.Components[0] != "Backend" || len(client.updated.Components) != 1 || client.updated.Components[0] != "Backend" {
+		t.Errorf("create/update components = %#v/%#v", client.created.Components, client.updated.Components)
 	}
 }
 

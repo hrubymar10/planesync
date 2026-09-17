@@ -18,7 +18,7 @@ with placeholder values only.
   "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",
-      "title_prefix": "[team]", "epic_key": "DST-100", "status_map": { }, "status_group_map": { }, "resolution_map": { } }
+      "title_prefix": "[team]", "epic_key": "DST-100", "components": ["Backend"], "status_map": { }, "status_group_map": { }, "resolution_map": { } }
   ]
 }
 ```
@@ -49,3 +49,7 @@ when a missing source item is transitioned to `deleted_status`.
 
 `projects[].epic_key` optionally places every created or updated target issue
 under that epic through the destination `parent` field.
+
+`projects[].components` lists destination component names applied to every
+created and updated issue. Configure every component required by the target
+issue type's create screen.

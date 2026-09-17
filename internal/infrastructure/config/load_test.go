@@ -46,6 +46,9 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Projects[0].EpicKey; got != "DST-100" {
 		t.Errorf("epic key = %q", got)
 	}
+	if got := result.Projects[0].Components; len(got) != 1 || got[0] != "Backend" {
+		t.Errorf("components = %#v", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {

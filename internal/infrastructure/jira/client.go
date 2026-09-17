@@ -21,6 +21,7 @@ const (
 	defaultAuthType = "basic"
 	defaultTimeout  = 30 * time.Second
 	maxResponseSize = 8 << 20
+	maxErrorSize    = 2 << 10
 )
 
 // CreateInput contains the Jira fields set when creating an issue.
@@ -32,6 +33,7 @@ type CreateInput struct {
 	Labels            []string
 	AssigneeAccountID string
 	ParentEpicKey     string
+	Components        []string
 }
 
 // UpdateInput contains the Jira fields updated on an existing issue.
@@ -40,6 +42,7 @@ type UpdateInput struct {
 	Description       json.RawMessage
 	AssigneeAccountID string
 	ParentEpicKey     string
+	Components        []string
 }
 
 type assignee struct {
@@ -48,6 +51,10 @@ type assignee struct {
 
 type parent struct {
 	Key string `json:"key"`
+}
+
+type component struct {
+	Name string `json:"name"`
 }
 
 // Client creates, updates, searches, and transitions Jira issues.
@@ -182,6 +189,7 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 			Labels      []string        `json:"labels"`
 			Assignee    *assignee       `json:"assignee,omitempty"`
 			Parent      *parent         `json:"parent,omitempty"`
+			Components  []component     `json:"components,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Project.Key = input.Project
@@ -194,6 +202,9 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 	}
 	if input.ParentEpicKey != "" {
 		request.Fields.Parent = &parent{Key: input.ParentEpicKey}
+	}
+	for _, name := range input.Components {
+		request.Fields.Components = append(request.Fields.Components, component{Name: name})
 	}
 
 	var response struct {
@@ -219,6 +230,7 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 			Description json.RawMessage `json:"description"`
 			Assignee    *assignee       `json:"assignee,omitempty"`
 			Parent      *parent         `json:"parent,omitempty"`
+			Components  []component     `json:"components,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Summary = input.Summary
@@ -228,6 +240,9 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 	}
 	if input.ParentEpicKey != "" {
 		request.Fields.Parent = &parent{Key: input.ParentEpicKey}
+	}
+	for _, name := range input.Components {
+		request.Fields.Components = append(request.Fields.Components, component{Name: name})
 	}
 	if err := c.do(ctx, http.MethodPut, "issue/"+key, request, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("update Jira issue: %w", err)
@@ -349,6 +364,13 @@ func (c *Client) do(ctx context.Context, method, resource string, input any, exp
 	}
 	defer response.Body.Close()
 	if response.StatusCode != expectedStatus {
+		snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorSize))
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned HTTP %d (read error body: %v)", response.StatusCode, readErr)
+		}
+		if detail := strings.TrimSpace(string(snippet)); detail != "" {
+			return fmt.Errorf("Jira API returned HTTP %d: %s", response.StatusCode, detail)
+		}
 		return fmt.Errorf("Jira API returned HTTP %d", response.StatusCode)
 	}
 	if output == nil {

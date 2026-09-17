@@ -68,7 +68,7 @@ func buildService(config configuration.Config, project configuration.Project, li
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},
-		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID, parentEpicKey: project.EpicKey},
+		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID, parentEpicKey: project.EpicKey, components: append([]string(nil), project.Components...)},
 		links,
 		statusmap.New(project.StatusMap, project.StatusGroupMap, project.ResolutionMap),
 		settings,
@@ -110,6 +110,7 @@ type targetAdapter struct {
 	client            jiraTargetClient
 	assigneeAccountID string
 	parentEpicKey     string
+	components        []string
 }
 
 type jiraTargetClient interface {
@@ -129,6 +130,7 @@ func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (str
 		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink), Labels: spec.Labels,
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
+		Components:        append([]string(nil), a.components...),
 	})
 }
 
@@ -137,6 +139,7 @@ func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.Upda
 		Summary: spec.Summary, Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink),
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
+		Components:        append([]string(nil), a.components...),
 	})
 }
 

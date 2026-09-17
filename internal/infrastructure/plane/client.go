@@ -17,6 +17,7 @@ import (
 const (
 	defaultTimeout   = 30 * time.Second
 	maxResponseBytes = 8 << 20
+	maxErrorBytes    = 2 << 10
 	pageSize         = "100"
 )
 
@@ -240,6 +241,13 @@ func (c *Client) get(ctx context.Context, resource, cursor string, destination a
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
+		snippet, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorBytes))
+		if readErr != nil {
+			return fmt.Errorf("%s request returned HTTP %d (read error body: %v)", resource, response.StatusCode, readErr)
+		}
+		if detail := strings.TrimSpace(string(snippet)); detail != "" {
+			return fmt.Errorf("%s request returned HTTP %d: %s", resource, response.StatusCode, detail)
+		}
 		return fmt.Errorf("%s request returned HTTP %d", resource, response.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))

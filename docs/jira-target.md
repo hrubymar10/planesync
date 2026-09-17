@@ -27,7 +27,11 @@ returned by `/myself`, so manual reassignments are corrected on the next run.
 This can be disabled with `defaults.assign_all_to_me`.
 When a project has `epic_key`, create and update payloads also set
 `parent.key`, keeping mirrored issues under that epic after manual re-parenting.
+Configured `components` are also sent by name on every create and update. This
+is required when the destination issue type has no default component.
 
 Descriptions are Atlassian Document Format. See [body-formatting.md](body-formatting.md).
 The base URL must be HTTPS; redirects are disabled, requests time out, response
 bodies are bounded, and the authorization header never appears in logs or errors.
+Non-success responses include a bounded prefix of the destination API's error
+body so validation failures are actionable without exposing request headers.

@@ -85,6 +85,7 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 				Labels      []string        `json:"labels"`
 				Assignee    *assignee       `json:"assignee"`
 				Parent      *parent         `json:"parent"`
+				Components  []component     `json:"components"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -99,6 +100,9 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		}
 		if body.Fields.Parent == nil || body.Fields.Parent.Key != "epic-parent" {
 			t.Errorf("parent = %#v", body.Fields.Parent)
+		}
+		if !reflect.DeepEqual(body.Fields.Components, []component{{Name: "Backend"}, {Name: "API"}}) {
+			t.Errorf("components = %#v", body.Fields.Components)
 		}
 		if !jsonEqual(body.Fields.Description, description) {
 			t.Errorf("description = %s, want %s", body.Fields.Description, description)
@@ -115,6 +119,7 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		Labels:            []string{"source-label", "sync-label"},
 		AssigneeAccountID: "account-current",
 		ParentEpicKey:     "epic-parent",
+		Components:        []string{"Backend", "API"},
 	})
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
@@ -134,6 +139,7 @@ func TestUpdate(t *testing.T) {
 				Description json.RawMessage `json:"description"`
 				Assignee    *assignee       `json:"assignee"`
 				Parent      *parent         `json:"parent"`
+				Components  []component     `json:"components"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -146,11 +152,14 @@ func TestUpdate(t *testing.T) {
 		if body.Fields.Parent == nil || body.Fields.Parent.Key != "epic-parent" {
 			t.Errorf("parent = %#v", body.Fields.Parent)
 		}
+		if !reflect.DeepEqual(body.Fields.Components, []component{{Name: "Backend"}}) {
+			t.Errorf("components = %#v", body.Fields.Components)
+		}
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current", ParentEpicKey: "epic-parent"}); err != nil {
+	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current", ParentEpicKey: "epic-parent", Components: []string{"Backend"}}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 }
@@ -166,6 +175,9 @@ func TestCreateAndUpdateOmitEmptyAssignee(t *testing.T) {
 		}
 		if _, exists := body.Fields["parent"]; exists {
 			t.Error("empty parent was included in fields")
+		}
+		if _, exists := body.Fields["components"]; exists {
+			t.Error("empty components were included in fields")
 		}
 		if request.Method == http.MethodPost {
 			writeJSON(writer, http.StatusCreated, `{"key":"created-key"}`)
@@ -327,10 +339,11 @@ func TestNewRejectsHTTPAndClientRedactsAuthorization(t *testing.T) {
 	}
 }
 
-func TestErrorResponseDoesNotLeakBodyOrAuthorization(t *testing.T) {
+func TestErrorResponseIncludesBoundedBodyWithoutAuthorization(t *testing.T) {
+	const detail = `{"errors":{"components":"Component is required"}}`
 	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte(testToken))
+		writer.WriteHeader(http.StatusBadRequest)
+		_, _ = writer.Write([]byte(detail + strings.Repeat("x", maxErrorSize)))
 	}))
 	defer server.Close()
 
@@ -338,7 +351,13 @@ func TestErrorResponseDoesNotLeakBodyOrAuthorization(t *testing.T) {
 	if err == nil {
 		t.Fatal("FindByLabel() returned nil error")
 	}
-	if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), client.authorization.Reveal()) {
+	if !strings.Contains(err.Error(), detail) {
+		t.Fatalf("error omitted response body: %v", err)
+	}
+	if len(err.Error()) > maxErrorSize+200 {
+		t.Fatalf("error body was not bounded: %d bytes", len(err.Error()))
+	}
+	if strings.Contains(err.Error(), client.authorization.Reveal()) {
 		t.Fatalf("error leaked authorization: %v", err)
 	}
 }
