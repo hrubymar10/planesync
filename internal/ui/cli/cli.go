@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	appsync "github.com/hrubymar10/planesync/internal/application/sync"
+	"github.com/hrubymar10/planesync/internal/infrastructure/lockfile"
 )
 
 const defaultConfigPath = "config/planesync.jsonc"
@@ -32,6 +34,12 @@ func Run(args []string, build Builder) int {
 }
 
 func run(args []string, build Builder, stdout, stderr io.Writer, now func() time.Time) int {
+	return runWithLock(args, build, stdout, stderr, now, lockfile.Acquire)
+}
+
+type acquireLockFunc func(string, time.Duration) (func() error, error)
+
+func runWithLock(args []string, build Builder, stdout, stderr io.Writer, now func() time.Time, acquire acquireLockFunc) int {
 	if len(args) == 0 {
 		printRootUsage(stdout)
 		return 0
@@ -104,6 +112,15 @@ func run(args []string, build Builder, stdout, stderr io.Writer, now func() time
 	if err != nil {
 		fmt.Fprintf(stderr, "configuration error: %v\n", err)
 		return 1
+	}
+	if !*dryRun {
+		lockPath := filepath.Join(filepath.Dir(*configPath), "planesync.lock")
+		release, err := acquire(lockPath, 10*time.Minute)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		defer func() { _ = release() }()
 	}
 	for _, project := range projects {
 		report, err := project.Run(context.Background(), options)

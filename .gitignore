@@ -1,6 +1,7 @@
 # Local configuration and synchronization state
 config/planesync.jsonc
 config/planesync-links.json
+config/planesync.lock
 
 # Go build and test output
 /planesync

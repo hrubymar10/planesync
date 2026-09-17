@@ -83,3 +83,14 @@ dry runs and the final item do not pause.
 Use `--limit N` to process at most the first N source items, sorted by ID.
 The default `0` is unlimited. Limited runs disable delete reconciliation because
 unseen items may still exist outside the partial view.
+
+## Single-instance lock
+
+Before a real run, planesync creates `planesync.lock` beside the configured
+link map (in the directory containing the config file). A lock less than 10
+minutes old stops the run with a message showing its path and creation time, so
+two processes cannot write the destination and local map concurrently. A lock
+at least 10 minutes old is treated as stale and reclaimed; it can also be
+deleted manually after confirming that no other instance is active. The lock is
+removed when the run finishes. `--dry-run` performs no writes and does not
+create a lock.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 		}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	exitCode := run([]string{"sync", "--reconcile", "--dry-run", "--since", "12h", "--config", "custom.jsonc"}, build, &stdout, &stderr, func() time.Time { return now })
+	exitCode := runWithoutLock([]string{"sync", "--reconcile", "--dry-run", "--since", "12h", "--config", "custom.jsonc"}, build, &stdout, &stderr, func() time.Time { return now })
 
 	if exitCode != 0 || stderr.Len() != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", exitCode, stderr.String())
@@ -81,7 +82,7 @@ func TestRunDefaultsToOneHourWindow(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"sync"}, build, &stdout, &stderr, func() time.Time { return now }); code != 0 {
+	if code := runWithoutLock([]string{"sync"}, build, &stdout, &stderr, func() time.Time { return now }); code != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
 	}
 	if !got.Since.Equal(now.Add(-time.Hour)) {
@@ -98,11 +99,55 @@ func TestRunAcceptsIdentifierAndIgnoresSince(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"sync", "--since", "not-a-window", "SRC-123"}, build, &stdout, &stderr, time.Now); code != 0 {
+	if code := runWithoutLock([]string{"sync", "--since", "not-a-window", "SRC-123"}, build, &stdout, &stderr, time.Now); code != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
 	}
 	if got.Identifier != "SRC-123" || !got.Since.IsZero() {
 		t.Errorf("options = %#v", got)
+	}
+}
+
+func TestRunAcquiresAndReleasesLockForRealRun(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "nested", "planesync.jsonc")
+	build := func(string) ([]Project, error) { return nil, nil }
+	var gotPath string
+	var gotStaleAfter time.Duration
+	released := false
+	acquire := func(path string, staleAfter time.Duration) (func() error, error) {
+		gotPath = path
+		gotStaleAfter = staleAfter
+		return func() error { released = true; return nil }, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := runWithLock([]string{"sync", "--config", configPath}, build, &stdout, &stderr, time.Now, acquire)
+	if code != 0 || stderr.Len() != 0 {
+		t.Fatalf("runWithLock() exit=%d stderr=%q", code, stderr.String())
+	}
+	wantPath := filepath.Join(filepath.Dir(configPath), "planesync.lock")
+	if gotPath != wantPath || gotStaleAfter != 10*time.Minute || !released {
+		t.Errorf("lock = path %q, stale %v, released %t; want %q, 10m, true", gotPath, gotStaleAfter, released, wantPath)
+	}
+}
+
+func TestRunLockFailureIsRuntimeError(t *testing.T) {
+	lockErr := errors.New("another planesync instance appears to be running; lock held since timestamp")
+	acquire := func(string, time.Duration) (func() error, error) { return nil, lockErr }
+	var stdout, stderr bytes.Buffer
+	code := runWithLock([]string{"sync"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
+	if code != 1 || !strings.Contains(stderr.String(), lockErr.Error()) {
+		t.Errorf("runWithLock() exit=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestRunDryRunDoesNotAcquireLock(t *testing.T) {
+	acquire := func(string, time.Duration) (func() error, error) {
+		t.Fatal("dry-run acquired a lock")
+		return nil, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := runWithLock([]string{"sync", "--dry-run"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
+	if code != 0 || stderr.Len() != 0 {
+		t.Errorf("runWithLock() exit=%d stderr=%q", code, stderr.String())
 	}
 }
 
@@ -133,7 +178,7 @@ func TestRunKeepsStreamedOutputWhenServiceFails(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"sync"}, build, &stdout, &stderr, time.Now); code != 1 {
+	if code := runWithoutLock([]string{"sync"}, build, &stdout, &stderr, time.Now); code != 1 {
 		t.Fatalf("run() exit = %d, want 1", code)
 	}
 	if stdout.String() != "SRC-16 -> CORE-4277: updated\n" || !strings.Contains(stderr.String(), "later failure") {
@@ -175,7 +220,7 @@ func TestRunExitCodes(t *testing.T) {
 				build = func(string) ([]Project, error) { return nil, nil }
 			}
 			var stdout, stderr bytes.Buffer
-			got := run(test.args, build, &stdout, &stderr, time.Now)
+			got := runWithoutLock(test.args, build, &stdout, &stderr, time.Now)
 			if got != test.wantCode || !strings.Contains(stderr.String(), test.wantError) {
 				t.Errorf("run() exit=%d stderr=%q, want %d containing %q", got, stderr.String(), test.wantCode, test.wantError)
 			}
@@ -186,11 +231,17 @@ func TestRunExitCodes(t *testing.T) {
 func TestRunHelp(t *testing.T) {
 	for _, args := range [][]string{{}, {"--help"}, {"sync", "--help"}} {
 		var stdout, stderr bytes.Buffer
-		if got := run(args, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now); got != 0 {
+		if got := runWithoutLock(args, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now); got != 0 {
 			t.Errorf("run(%v) exit = %d", args, got)
 		}
 		if stdout.Len() == 0 && stderr.Len() == 0 {
 			t.Errorf("run(%v) printed no usage", args)
 		}
 	}
+}
+
+func runWithoutLock(args []string, build Builder, stdout, stderr *bytes.Buffer, now func() time.Time) int {
+	return runWithLock(args, build, stdout, stderr, now, func(string, time.Duration) (func() error, error) {
+		return func() error { return nil }, nil
+	})
 }
