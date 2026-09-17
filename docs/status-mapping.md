@@ -21,6 +21,10 @@ resolution. This allows source states such as Done and Cancelled to share the
 destination status `Done` while using resolutions `Done` and `Declined`.
 Resolution lookup has no group fallback: one source state such as Cancelled
 always maps to one fixed resolution.
+Resolution is best-effort: when a target workflow rejects the resolution field
+because it is absent from the transition screen, planesync retries the same
+transition without resolution so the status still advances. Other transition
+errors remain failures.
 
 ## Deletes
 

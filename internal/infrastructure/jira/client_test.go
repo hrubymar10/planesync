@@ -255,6 +255,60 @@ func TestSetStatusOmitsEmptyResolution(t *testing.T) {
 	}
 }
 
+func TestSetStatusRetriesWithoutRejectedResolution(t *testing.T) {
+	postCount := 0
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			writeJSON(writer, http.StatusOK, `{"transitions":[{"id":"transition-one","to":{"name":"Done"}}]}`)
+			return
+		}
+		postCount++
+		var body map[string]json.RawMessage
+		decodeRequest(t, request, &body)
+		_, hasFields := body["fields"]
+		if postCount == 1 {
+			if !hasFields {
+				t.Error("first transition omitted resolution fields")
+			}
+			writeJSON(writer, http.StatusBadRequest, `{"errors":{"resolution":"Field cannot be set"}}`)
+			return
+		}
+		if hasFields {
+			t.Error("fallback transition retained resolution fields")
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	if err := client.SetStatus(context.Background(), "example-key", "Done", "Declined"); err != nil {
+		t.Fatalf("SetStatus(): %v", err)
+	}
+	if postCount != 2 {
+		t.Errorf("transition posts = %d, want 2", postCount)
+	}
+}
+
+func TestSetStatusDoesNotRetryUnrelatedBadRequest(t *testing.T) {
+	postCount := 0
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			writeJSON(writer, http.StatusOK, `{"transitions":[{"id":"transition-one","to":{"name":"Done"}}]}`)
+			return
+		}
+		postCount++
+		writeJSON(writer, http.StatusBadRequest, `{"errors":{"comment":"Comment is required"}}`)
+	}))
+	defer server.Close()
+
+	err := client.SetStatus(context.Background(), "example-key", "Done", "Declined")
+	if err == nil || !strings.Contains(err.Error(), "Comment is required") {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
+	if postCount != 1 {
+		t.Errorf("transition posts = %d, want 1", postCount)
+	}
+}
+
 func TestSetStatusReturnsClearNoMatchError(t *testing.T) {
 	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, `{"transitions":[{"id":"transition-one","to":{"name":"Started"}}]}`)

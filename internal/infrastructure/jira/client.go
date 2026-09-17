@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -64,6 +65,18 @@ type Client struct {
 	authType      string
 	authorization configuration.Secret
 	httpClient    *http.Client
+}
+
+type apiError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *apiError) Error() string {
+	if e.Body == "" {
+		return fmt.Sprintf("Jira API returned HTTP %d", e.StatusCode)
+	}
+	return fmt.Sprintf("Jira API returned HTTP %d: %s", e.StatusCode, e.Body)
 }
 
 // String returns a diagnostic representation with authorization redacted.
@@ -303,9 +316,22 @@ func (c *Client) SetStatus(ctx context.Context, key, statusName, resolution stri
 		request.Fields.Resolution.Name = resolution
 	}
 	if err := c.do(ctx, http.MethodPost, resource, request, http.StatusNoContent, nil); err != nil {
-		return fmt.Errorf("transition Jira issue: %w", err)
+		if resolution == "" || !isResolutionRejection(err) {
+			return fmt.Errorf("transition Jira issue: %w", err)
+		}
+		request.Fields = nil
+		if retryErr := c.do(ctx, http.MethodPost, resource, request, http.StatusNoContent, nil); retryErr != nil {
+			return fmt.Errorf("transition Jira issue without resolution: %w", retryErr)
+		}
 	}
 	return nil
+}
+
+func isResolutionRejection(err error) bool {
+	var responseError *apiError
+	return errors.As(err, &responseError) &&
+		responseError.StatusCode >= 400 && responseError.StatusCode < 500 &&
+		strings.Contains(strings.ToLower(responseError.Body), "resolution")
 }
 
 // TextToADF converts newline-delimited plain text to a minimal ADF document.
@@ -368,10 +394,7 @@ func (c *Client) do(ctx context.Context, method, resource string, input any, exp
 		if readErr != nil {
 			return fmt.Errorf("Jira API returned HTTP %d (read error body: %v)", response.StatusCode, readErr)
 		}
-		if detail := strings.TrimSpace(string(snippet)); detail != "" {
-			return fmt.Errorf("Jira API returned HTTP %d: %s", response.StatusCode, detail)
-		}
-		return fmt.Errorf("Jira API returned HTTP %d", response.StatusCode)
+		return &apiError{StatusCode: response.StatusCode, Body: strings.TrimSpace(string(snippet))}
 	}
 	if output == nil {
 		return nil
