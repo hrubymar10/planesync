@@ -19,6 +19,7 @@
   "defaults": {
     "since": "7d",
     "body_format": "rich",
+    "deleted_status": "Done",
   },
 
   "projects": [

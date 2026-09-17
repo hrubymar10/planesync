@@ -27,8 +27,9 @@ type Endpoint struct {
 
 // Defaults contains settings shared by all project mappings.
 type Defaults struct {
-	Since      string `json:"since"`
-	BodyFormat string `json:"body_format"`
+	Since         string `json:"since"`
+	BodyFormat    string `json:"body_format"`
+	DeletedStatus string `json:"deleted_status,omitempty"`
 }
 
 // Project maps a Plane project to a Jira project.

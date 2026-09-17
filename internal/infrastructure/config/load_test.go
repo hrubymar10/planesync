@@ -34,6 +34,9 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Projects[0].StatusGroupMap["started"]; got != "In Progress" {
 		t.Errorf("status group mapping = %q", got)
 	}
+	if got := result.Defaults.DeletedStatus; got != "Done" {
+		t.Errorf("deleted status = %q", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {
