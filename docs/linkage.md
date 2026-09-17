@@ -15,6 +15,10 @@ A local JSON file (default `config/planesync-links.json`, gitignored) caches
 `source-id -> target-key` so a normal run avoids a search per item. It is a
 versioned `{ "version": 1, "links": { ... } }` document written atomically
 (same-directory temp file, fsync, rename) with restrictive permissions.
+The map is persisted immediately after every create or label recovery, before
+later operations such as status transitions. A mid-run failure therefore
+cannot lose a newly established mapping and cause an index-lag duplicate on the
+next run. The end-of-run save remains as a final checkpoint.
 
 - A missing or empty file loads as an empty map (a fresh host is fine).
 - Malformed JSON or an unsupported version is a clear error, not a silent wipe —

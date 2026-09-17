@@ -223,6 +223,9 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 			}
 			key = createdKey
 			links[item.ID] = key
+			if err := s.links.Save(links); err != nil {
+				return fmt.Errorf("save created link for source item %q: %w", item.ID, err)
+			}
 		}
 	case linkmap.Mapped, linkmap.Labeled:
 		report.Updated++
@@ -235,6 +238,9 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 			}
 			if resolution == linkmap.Labeled {
 				links[item.ID] = key
+				if err := s.links.Save(links); err != nil {
+					return fmt.Errorf("save recovered link for source item %q: %w", item.ID, err)
+				}
 			}
 		}
 	}

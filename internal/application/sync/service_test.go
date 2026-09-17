@@ -2,7 +2,9 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,7 +33,7 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	if created.BackLink != "https://app.plane.so/example-workspace/projects/source-project/issues/source-item" {
 		t.Errorf("back link = %q", created.BackLink)
 	}
-	if links.saved["source-item"] != "created-key" || links.saveCalls != 1 {
+	if links.saved["source-item"] != "created-key" || links.saveCalls != 2 {
 		t.Errorf("saved links = %#v, calls = %d", links.saved, links.saveCalls)
 	}
 }
@@ -91,8 +93,38 @@ func TestRunRecoversLinkByLabel(t *testing.T) {
 	if report.Updated != 1 || target.findLabel != "plane-source-item" || len(target.updates) != 1 {
 		t.Errorf("report/target = %#v / %#v", report, target)
 	}
-	if links.saved["source-item"] != "recovered-key" {
+	if links.saved["source-item"] != "recovered-key" || links.saveCalls != 2 {
 		t.Errorf("saved links = %#v", links.saved)
+	}
+}
+
+func TestRunPersistsCreatedLinkBeforeStatusFailure(t *testing.T) {
+	source := &fakeSource{changed: [][]Item{{testItem()}}}
+	target := &fakeTarget{createKey: "created-key", statusErr: errors.New("status unavailable")}
+	links := &fakeLinks{links: map[string]string{}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+	_, err := service.Run(context.Background(), Options{Mode: Incremental})
+	if err == nil || !strings.Contains(err.Error(), "status unavailable") {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if links.saveCalls != 1 || links.saved["source-item"] != "created-key" {
+		t.Fatalf("durable links after status failure = %#v, calls=%d", links.saved, links.saveCalls)
+	}
+}
+
+func TestRunPersistsRecoveredLinkBeforeStatusFailure(t *testing.T) {
+	source := &fakeSource{changed: [][]Item{{testItem()}}}
+	target := &fakeTarget{labelKey: "recovered-key", labelFound: true, statusErr: errors.New("status unavailable")}
+	links := &fakeLinks{links: map[string]string{}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+	_, err := service.Run(context.Background(), Options{Mode: Incremental})
+	if err == nil || !strings.Contains(err.Error(), "status unavailable") {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if links.saveCalls != 1 || links.saved["source-item"] != "recovered-key" {
+		t.Fatalf("durable links after status failure = %#v, calls=%d", links.saved, links.saveCalls)
 	}
 }
 
@@ -207,6 +239,7 @@ type fakeTarget struct {
 	creates    []CreateSpec
 	updates    []updateCall
 	statuses   []statusCall
+	statusErr  error
 }
 
 func (f *fakeTarget) FindByLabel(_ context.Context, label string) (string, bool, error) {
@@ -227,7 +260,7 @@ func (f *fakeTarget) Update(_ context.Context, key string, spec UpdateSpec) erro
 
 func (f *fakeTarget) SetStatus(_ context.Context, key, status, resolution string) error {
 	f.statuses = append(f.statuses, statusCall{key: key, status: status, resolution: resolution})
-	return nil
+	return f.statusErr
 }
 
 type fakeLinks struct {
