@@ -51,7 +51,7 @@ type Target interface {
 	FindByLabel(context.Context, string) (key string, found bool, err error)
 	Create(context.Context, CreateSpec) (key string, err error)
 	Update(context.Context, string, UpdateSpec) error
-	SetStatus(context.Context, string, string) error
+	SetStatus(context.Context, string, string, string) error
 }
 
 // Links persists source-to-target issue keys.
@@ -62,19 +62,20 @@ type Links interface {
 
 // StatusResolver maps source states to target statuses.
 type StatusResolver interface {
-	Resolve(stateName, stateGroup string) (status string, ok bool)
+	Resolve(stateName, stateGroup string) (status, resolution string, ok bool)
 }
 
 // Settings configures one project synchronization service.
 type Settings struct {
-	TitlePrefix     string
-	AppBaseURL      string
-	Workspace       string
-	ProjectID       string
-	TargetProject   string
-	TargetIssueType string
-	BodyFormat      string
-	DeletedStatus   string
+	TitlePrefix       string
+	AppBaseURL        string
+	Workspace         string
+	ProjectID         string
+	TargetProject     string
+	TargetIssueType   string
+	BodyFormat        string
+	DeletedStatus     string
+	DeletedResolution string
 }
 
 // Mode selects the source items and reconciliation behavior for a run.
@@ -231,7 +232,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 		}
 	}
 
-	status, ok := s.resolver.Resolve(item.StateName, item.StateGroup)
+	status, statusResolution, ok := s.resolver.Resolve(item.StateName, item.StateGroup)
 	if !ok {
 		report.Skipped++
 		report.Actions = append(report.Actions, Action{Kind: ActionSkipStatus, SourceID: item.ID, Key: key, Detail: item.StateName})
@@ -240,7 +241,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 	report.StatusSet++
 	report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionSetStatus, SourceID: item.ID, Key: key, Detail: status})
 	if !dryRun {
-		if err := s.target.SetStatus(ctx, key, status); err != nil {
+		if err := s.target.SetStatus(ctx, key, status, statusResolution); err != nil {
 			return fmt.Errorf("set target %q status for source item %q: %w", key, item.ID, err)
 		}
 	}
@@ -265,7 +266,7 @@ func (s *Service) reconcileDeleted(ctx context.Context, present map[string]struc
 		report.Deleted++
 		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionDelete, SourceID: sourceID, Key: key, Detail: s.settings.DeletedStatus})
 		if !dryRun {
-			if err := s.target.SetStatus(ctx, key, s.settings.DeletedStatus); err != nil {
+			if err := s.target.SetStatus(ctx, key, s.settings.DeletedStatus, s.settings.DeletedResolution); err != nil {
 				return fmt.Errorf("mark target %q deleted for missing source item %q: %w", key, sourceID, err)
 			}
 			delete(links, sourceID)

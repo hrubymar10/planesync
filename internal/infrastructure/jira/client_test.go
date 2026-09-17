@@ -184,10 +184,18 @@ func TestSetStatusMatchesTargetCaseInsensitively(t *testing.T) {
 				Transition struct {
 					ID string `json:"id"`
 				} `json:"transition"`
+				Fields struct {
+					Resolution struct {
+						Name string `json:"name"`
+					} `json:"resolution"`
+				} `json:"fields"`
 			}
 			decodeRequest(t, request, &body)
 			if body.Transition.ID != "transition-two" {
 				t.Errorf("transition ID = %q", body.Transition.ID)
+			}
+			if body.Fields.Resolution.Name != "Declined" {
+				t.Errorf("resolution = %q", body.Fields.Resolution.Name)
 			}
 			writer.WriteHeader(http.StatusNoContent)
 		default:
@@ -196,11 +204,30 @@ func TestSetStatusMatchesTargetCaseInsensitively(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := client.SetStatus(context.Background(), "example-key", "done"); err != nil {
+	if err := client.SetStatus(context.Background(), "example-key", "done", "Declined"); err != nil {
 		t.Fatalf("SetStatus(): %v", err)
 	}
 	if requests != 2 {
 		t.Errorf("request count = %d, want 2", requests)
+	}
+}
+
+func TestSetStatusOmitsEmptyResolution(t *testing.T) {
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			writeJSON(writer, http.StatusOK, `{"transitions":[{"id":"transition-one","to":{"name":"Done"}}]}`)
+			return
+		}
+		var body map[string]json.RawMessage
+		decodeRequest(t, request, &body)
+		if _, exists := body["fields"]; exists {
+			t.Error("empty resolution emitted fields")
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	if err := client.SetStatus(context.Background(), "example-key", "Done", ""); err != nil {
+		t.Fatalf("SetStatus(): %v", err)
 	}
 }
 
@@ -210,7 +237,7 @@ func TestSetStatusReturnsClearNoMatchError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := client.SetStatus(context.Background(), "example-key", "Done")
+	err := client.SetStatus(context.Background(), "example-key", "Done", "")
 	if err == nil || !strings.Contains(err.Error(), `no Jira transition targets status "Done"`) {
 		t.Fatalf("SetStatus() error = %v", err)
 	}

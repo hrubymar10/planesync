@@ -64,12 +64,13 @@ func buildService(config configuration.Config, project configuration.Project, li
 		Workspace: config.Plane.Workspace, ProjectID: project.PlaneProject,
 		TargetProject: project.JiraProject, TargetIssueType: project.JiraIssueType,
 		BodyFormat: config.Defaults.BodyFormat, DeletedStatus: config.Defaults.DeletedStatus,
+		DeletedResolution: config.Defaults.DeletedResolution,
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},
 		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID},
 		links,
-		statusmap.New(project.StatusMap, project.StatusGroupMap),
+		statusmap.New(project.StatusMap, project.StatusGroupMap, project.ResolutionMap),
 		settings,
 	), nil
 }
@@ -129,8 +130,8 @@ func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.Upda
 	})
 }
 
-func (a targetAdapter) SetStatus(ctx context.Context, key, status string) error {
-	return a.client.SetStatus(ctx, key, status)
+func (a targetAdapter) SetStatus(ctx context.Context, key, status, resolution string) error {
+	return a.client.SetStatus(ctx, key, status, resolution)
 }
 
 func renderBody(format, bodyHTML, backLink string) []byte {

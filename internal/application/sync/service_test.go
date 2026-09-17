@@ -52,6 +52,9 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	if target.findCalls != 0 || len(target.creates) != 0 {
 		t.Errorf("unexpected lookup/create calls: find=%d create=%d", target.findCalls, len(target.creates))
 	}
+	if len(target.statuses) != 1 || target.statuses[0].resolution != "Fixed" {
+		t.Errorf("status calls = %#v", target.statuses)
+	}
 }
 
 func TestRunSecondIncrementalWithNoChangesIsNoOp(t *testing.T) {
@@ -121,7 +124,7 @@ func TestRunFullReconcilesDeletedItem(t *testing.T) {
 	if source.listCalls != 1 || source.changedCalls != 0 || report.Deleted != 1 {
 		t.Errorf("source/report = %#v / %#v", source, report)
 	}
-	if len(target.statuses) != 1 || target.statuses[0] != (statusCall{key: "target-key", status: "Removed"}) {
+	if len(target.statuses) != 1 || target.statuses[0] != (statusCall{key: "target-key", status: "Removed", resolution: "Declined"}) {
 		t.Errorf("status calls = %#v", target.statuses)
 	}
 	if len(links.saved) != 0 {
@@ -161,7 +164,7 @@ func testService(source Source, target Target, links Links, resolver StatusResol
 	return New(source, target, links, resolver, Settings{
 		TitlePrefix: "[team]", AppBaseURL: "https://app.plane.so", Workspace: "example-workspace",
 		ProjectID: "source-project", TargetProject: "DST", TargetIssueType: "Task",
-		BodyFormat: "rich", DeletedStatus: "Removed",
+		BodyFormat: "rich", DeletedStatus: "Removed", DeletedResolution: "Declined",
 	})
 }
 
@@ -192,8 +195,7 @@ type updateCall struct {
 }
 
 type statusCall struct {
-	key    string
-	status string
+	key, status, resolution string
 }
 
 type fakeTarget struct {
@@ -223,8 +225,8 @@ func (f *fakeTarget) Update(_ context.Context, key string, spec UpdateSpec) erro
 	return nil
 }
 
-func (f *fakeTarget) SetStatus(_ context.Context, key, status string) error {
-	f.statuses = append(f.statuses, statusCall{key: key, status: status})
+func (f *fakeTarget) SetStatus(_ context.Context, key, status, resolution string) error {
+	f.statuses = append(f.statuses, statusCall{key: key, status: status, resolution: resolution})
 	return nil
 }
 
@@ -249,9 +251,13 @@ func (f *fakeLinks) Save(links map[string]string) error {
 
 type mapResolver map[string]string
 
-func (r mapResolver) Resolve(stateName, _ string) (string, bool) {
+func (r mapResolver) Resolve(stateName, _ string) (string, string, bool) {
 	status, ok := r[stateName]
-	return status, ok
+	resolution := ""
+	if stateName == "Started" {
+		resolution = "Fixed"
+	}
+	return status, resolution, ok
 }
 
 func TestFakeLinksCopiesOnSave(t *testing.T) {

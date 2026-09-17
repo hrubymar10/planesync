@@ -20,7 +20,8 @@
     "since": "7d",
     "body_format": "rich",
     "deleted_status": "Done",
-	"assign_all_to_me": true,
+    "deleted_resolution": "Declined",
+    "assign_all_to_me": true,
   },
 
   "projects": [
@@ -38,6 +39,10 @@
         "backlog": "To Do",
         "started": "In Progress",
         "completed": "Done",
+      },
+      "resolution_map": {
+        "Completed": "Done",
+        "Cancelled": "Declined",
       },
     },
   ],

@@ -37,6 +37,12 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Defaults.DeletedStatus; got != "Done" {
 		t.Errorf("deleted status = %q", got)
 	}
+	if got := result.Defaults.DeletedResolution; got != "Declined" {
+		t.Errorf("deleted resolution = %q", got)
+	}
+	if got := result.Projects[0].ResolutionMap["Cancelled"]; got != "Declined" {
+		t.Errorf("resolution mapping = %q", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {

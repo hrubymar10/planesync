@@ -27,10 +27,11 @@ type Endpoint struct {
 
 // Defaults contains settings shared by all project mappings.
 type Defaults struct {
-	Since         string `json:"since"`
-	BodyFormat    string `json:"body_format"`
-	DeletedStatus string `json:"deleted_status,omitempty"`
-	AssignAllToMe *bool  `json:"assign_all_to_me,omitempty"`
+	Since             string `json:"since"`
+	BodyFormat        string `json:"body_format"`
+	DeletedStatus     string `json:"deleted_status,omitempty"`
+	DeletedResolution string `json:"deleted_resolution,omitempty"`
+	AssignAllToMe     *bool  `json:"assign_all_to_me,omitempty"`
 }
 
 // ShouldAssignAllToMe reports whether mirrored issues should be assigned to the authenticating user.
@@ -48,6 +49,7 @@ type Project struct {
 	PlaneToken     Secret            `json:"plane_token,omitempty"`
 	StatusMap      map[string]string `json:"status_map"`
 	StatusGroupMap map[string]string `json:"status_group_map,omitempty"`
+	ResolutionMap  map[string]string `json:"resolution_map,omitempty"`
 }
 
 // Secret holds a sensitive configuration value.

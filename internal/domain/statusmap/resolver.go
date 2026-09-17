@@ -4,26 +4,29 @@ package statusmap
 type Resolver struct {
 	exact         map[string]string
 	groupFallback map[string]string
+	resolutions   map[string]string
 }
 
 // New creates a resolver with defensive copies of both mapping tables.
-func New(table, groupFallback map[string]string) *Resolver {
+func New(table, groupFallback, resolutionMap map[string]string) *Resolver {
 	return &Resolver{
 		exact:         clone(table),
 		groupFallback: clone(groupFallback),
+		resolutions:   clone(resolutionMap),
 	}
 }
 
 // Resolve returns an exact state-name match or a state-group fallback.
-func (r *Resolver) Resolve(stateName, stateGroup string) (string, bool) {
+func (r *Resolver) Resolve(stateName, stateGroup string) (string, string, bool) {
 	if r == nil {
-		return "", false
+		return "", "", false
 	}
+	resolution := r.resolutions[stateName]
 	if status, ok := r.exact[stateName]; ok {
-		return status, true
+		return status, resolution, true
 	}
 	status, ok := r.groupFallback[stateGroup]
-	return status, ok
+	return status, resolution, ok
 }
 
 func clone(source map[string]string) map[string]string {

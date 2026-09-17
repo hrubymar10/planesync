@@ -222,7 +222,7 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 }
 
 // SetStatus transitions a Jira issue to the named target status.
-func (c *Client) SetStatus(ctx context.Context, key, statusName string) error {
+func (c *Client) SetStatus(ctx context.Context, key, statusName, resolution string) error {
 	if err := validatePathSegment("issue key", key); err != nil {
 		return err
 	}
@@ -258,8 +258,21 @@ func (c *Client) SetStatus(ctx context.Context, key, statusName string) error {
 		Transition struct {
 			ID string `json:"id"`
 		} `json:"transition"`
+		Fields *struct {
+			Resolution struct {
+				Name string `json:"name"`
+			} `json:"resolution"`
+		} `json:"fields,omitempty"`
 	}{}
 	request.Transition.ID = transitionID
+	if resolution != "" {
+		request.Fields = &struct {
+			Resolution struct {
+				Name string `json:"name"`
+			} `json:"resolution"`
+		}{}
+		request.Fields.Resolution.Name = resolution
+	}
 	if err := c.do(ctx, http.MethodPost, resource, request, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("transition Jira issue: %w", err)
 	}
