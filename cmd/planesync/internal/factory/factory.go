@@ -2,8 +2,11 @@ package factory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"time"
 
 	appsync "github.com/hrubymar10/planesync/internal/application/sync"
@@ -59,6 +62,7 @@ func buildService(config configuration.Config, project configuration.Project, li
 		TargetProject: project.JiraProject, TargetIssueType: project.JiraIssueType,
 		BodyFormat: config.Defaults.BodyFormat, DeletedStatus: config.Defaults.DeletedStatus,
 		DeletedResolution: config.Defaults.DeletedResolution,
+		ContentSalt:       contentSalt(config.Defaults, project, assigneeAccountID),
 		Throttle:          time.Duration(config.Defaults.ThrottleMS) * time.Millisecond,
 	}
 	return appsync.New(
@@ -155,22 +159,60 @@ type linksAdapter struct {
 	store *linkstore.Store
 }
 
-func (a linksAdapter) Load() (map[string]string, error) {
+func (a linksAdapter) Load() (map[string]appsync.Entry, error) {
 	links, err := a.store.Load()
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]string, len(links))
-	for sourceID, targetKey := range links {
-		result[sourceID] = targetKey
+	result := make(map[string]appsync.Entry, len(links))
+	for sourceID, entry := range links {
+		result[sourceID] = appsync.Entry{Key: entry.Key, UpdatedAt: entry.UpdatedAt, ConfigSalt: entry.ConfigSalt}
 	}
 	return result, nil
 }
 
-func (a linksAdapter) Save(links map[string]string) error {
+func (a linksAdapter) Save(links map[string]appsync.Entry) error {
 	persisted := make(linkstore.Map, len(links))
-	for sourceID, targetKey := range links {
-		persisted[sourceID] = targetKey
+	for sourceID, entry := range links {
+		persisted[sourceID] = linkstore.Entry{Key: entry.Key, UpdatedAt: entry.UpdatedAt, ConfigSalt: entry.ConfigSalt}
 	}
 	return a.store.Save(persisted)
+}
+
+func contentSalt(defaults configuration.Defaults, project configuration.Project, assigneeAccountID string) string {
+	hash := sha256.New()
+	writePart := func(name, value string) {
+		_, _ = hash.Write([]byte(name))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write([]byte(value))
+		_, _ = hash.Write([]byte{0})
+	}
+	writeMap := func(name string, values map[string]string) {
+		keys := make([]string, 0, len(values))
+		for key := range values {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			writePart(name+".key", key)
+			writePart(name+".value", values[key])
+		}
+	}
+
+	writePart("title_prefix", project.TitlePrefix)
+	writeMap("status_map", project.StatusMap)
+	writeMap("status_group_map", project.StatusGroupMap)
+	writeMap("resolution_map", project.ResolutionMap)
+	writePart("priority", project.Priority)
+	components := append([]string(nil), project.Components...)
+	sort.Strings(components)
+	for _, component := range components {
+		writePart("component", component)
+	}
+	writePart("epic_key", project.EpicKey)
+	writePart("assignee_account_id", assigneeAccountID)
+	writePart("body_format", defaults.BodyFormat)
+	writePart("deleted_status", defaults.DeletedStatus)
+	writePart("deleted_resolution", defaults.DeletedResolution)
+	return hex.EncodeToString(hash.Sum(nil))
 }

@@ -26,7 +26,9 @@ standard library.
 ## Data flow
 
 A run reads work items from the source (Plane), resolves each to a target issue
-(Jira) through the link map, applies the mirrored summary, status, and body, and
-records the link. In full and reconcile modes it also
+(Jira) through the link map, and compares Plane's `updated_at` plus the current
+write-configuration salt with the last successful write. Changed items receive
+the mirrored summary, status, and body and record the new markers; matching
+items perform no destination write. In full and reconcile modes it also
 transitions issues whose source item has disappeared. `--dry-run` plans every
 action without performing a write.

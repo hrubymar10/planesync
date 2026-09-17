@@ -11,7 +11,10 @@ import (
 func TestRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "links.json")
 	store := New(path)
-	want := Map{"source-one": "target-one", "source-two": "target-two"}
+	want := Map{
+		"source-one": {Key: "target-one", UpdatedAt: "2026-09-17T10:00:00Z", ConfigSalt: "salt-one"},
+		"source-two": {Key: "target-two", UpdatedAt: "2026-09-17T11:00:00Z", ConfigSalt: "salt-two"},
+	}
 
 	if err := store.Save(want); err != nil {
 		t.Fatalf("Save(): %v", err)
@@ -30,6 +33,9 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(string(contents), `"version": 1`) || !strings.Contains(string(contents), `"links": {`) {
 		t.Errorf("persisted document does not use versioned envelope: %s", contents)
+	}
+	if !strings.Contains(string(contents), `"key": "target-one"`) || !strings.Contains(string(contents), `"updated_at": "2026-09-17T10:00:00Z"`) || !strings.Contains(string(contents), `"config_salt": "salt-one"`) {
+		t.Errorf("persisted document does not use entry objects: %s", contents)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -79,10 +85,10 @@ func TestSaveAtomicallyOverwritesExistingFile(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "links.json")
 	store := New(path)
-	if err := store.Save(Map{"old-source": "old-target"}); err != nil {
+	if err := store.Save(Map{"old-source": {Key: "old-target"}}); err != nil {
 		t.Fatalf("first Save(): %v", err)
 	}
-	want := Map{"new-source": "new-target"}
+	want := Map{"new-source": {Key: "new-target", UpdatedAt: "2026-09-17T10:00:00Z", ConfigSalt: "new-salt"}}
 	if err := store.Save(want); err != nil {
 		t.Fatalf("second Save(): %v", err)
 	}
@@ -126,5 +132,20 @@ func TestLoadRejectsUnsupportedVersion(t *testing.T) {
 	_, err := New(path).Load()
 	if err == nil || !strings.Contains(err.Error(), "unsupported version 2") {
 		t.Fatalf("Load() error = %v, want version error", err)
+	}
+}
+
+func TestLoadLegacyStringEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"links":{"source-id":"target-key"}}`), 0o600); err != nil {
+		t.Fatalf("write legacy file: %v", err)
+	}
+	links, err := New(path).Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	want := Map{"source-id": {Key: "target-key"}}
+	if !reflect.DeepEqual(links, want) {
+		t.Errorf("Load() = %#v, want %#v", links, want)
 	}
 }

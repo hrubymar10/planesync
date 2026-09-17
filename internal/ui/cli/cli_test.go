@@ -66,7 +66,7 @@ func TestRunParsesSyncFlagsAndPrintsReport(t *testing.T) {
 	if gotPath != "custom.jsonc" || gotOptions.Mode != appsync.Reconcile || !gotOptions.DryRun || !gotOptions.Since.Equal(now.Add(-12*time.Hour)) {
 		t.Errorf("path/options = %q / %#v", gotPath, gotOptions)
 	}
-	if output := stdout.String(); output != "SRC-16 -> (new): created\ncreated=1 updated=0 status-set=1 deleted=0 skipped=0\n" {
+	if output := stdout.String(); output != "SRC-16 -> (new): created\ncreated=1 updated=0 unchanged=0 status-set=1 deleted=0 skipped=0\n" {
 		t.Errorf("stdout = %q", output)
 	}
 }
@@ -84,7 +84,7 @@ func TestStreamingActionsPrecedeSummary(t *testing.T) {
 		printAction(&output, action)
 	}
 	printReport(&output, report)
-	want := "SRC-16 -> CORE-4277: updated\nsource-id -> CORE-4278: deleted\ncreated=0 updated=1 status-set=0 deleted=1 skipped=0\n"
+	want := "SRC-16 -> CORE-4277: updated\nsource-id -> CORE-4278: deleted\ncreated=0 updated=1 unchanged=0 status-set=0 deleted=1 skipped=0\n"
 	if output.String() != want {
 		t.Errorf("printReport() = %q, want %q", output.String(), want)
 	}

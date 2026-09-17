@@ -129,8 +129,8 @@ func parseSince(value string, now time.Time) (time.Time, error) {
 }
 
 func printReport(output io.Writer, report appsync.Report) {
-	fmt.Fprintf(output, "created=%d updated=%d status-set=%d deleted=%d skipped=%d\n",
-		report.Created, report.Updated, report.StatusSet, report.Deleted, report.Skipped)
+	fmt.Fprintf(output, "created=%d updated=%d unchanged=%d status-set=%d deleted=%d skipped=%d\n",
+		report.Created, report.Updated, report.Unchanged, report.StatusSet, report.Deleted, report.Skipped)
 }
 
 func printAction(output io.Writer, action appsync.Action) {

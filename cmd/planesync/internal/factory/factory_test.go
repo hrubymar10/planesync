@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	appsync "github.com/hrubymar10/planesync/internal/application/sync"
+	"github.com/hrubymar10/planesync/internal/domain/configuration"
 	"github.com/hrubymar10/planesync/internal/infrastructure/jira"
 	"github.com/hrubymar10/planesync/internal/infrastructure/plane"
 )
@@ -78,6 +79,31 @@ func TestSourceItemsForwardsIdentifier(t *testing.T) {
 	items := sourceItems([]plane.Item{{ID: "source-id", Identifier: "SRC-16"}})
 	if len(items) != 1 || items[0].ID != "source-id" || items[0].Identifier != "SRC-16" {
 		t.Errorf("sourceItems() = %#v", items)
+	}
+}
+
+func TestContentSaltIsOrderIndependentAndCoversWriteConfiguration(t *testing.T) {
+	defaults := configuration.Defaults{BodyFormat: "rich", DeletedStatus: "Removed", DeletedResolution: "Declined"}
+	project := configuration.Project{
+		TitlePrefix: "[team]", StatusMap: map[string]string{"Started": "In Progress", "Done": "Done"},
+		StatusGroupMap: map[string]string{"cancelled": "Removed"}, ResolutionMap: map[string]string{"Done": "Fixed"},
+		Priority: "High", Components: []string{"API", "Backend"}, EpicKey: "EPIC-1",
+	}
+	want := contentSalt(defaults, project, "account-id")
+	reordered := project
+	reordered.StatusMap = map[string]string{"Done": "Done", "Started": "In Progress"}
+	reordered.Components = []string{"Backend", "API"}
+	if got := contentSalt(defaults, reordered, "account-id"); got != want {
+		t.Errorf("reordered salt = %q, want %q", got, want)
+	}
+
+	changed := project
+	changed.Priority = "Low"
+	if got := contentSalt(defaults, changed, "account-id"); got == want {
+		t.Error("priority change did not change content salt")
+	}
+	if got := contentSalt(defaults, project, "other-account"); got == want {
+		t.Error("assignee change did not change content salt")
 	}
 }
 

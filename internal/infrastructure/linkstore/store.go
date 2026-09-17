@@ -10,8 +10,31 @@ import (
 
 const currentVersion = 1
 
-// Map associates Plane work item IDs with Jira issue keys.
-type Map map[string]string
+// Entry records the Jira key and synchronization markers for one Plane item.
+type Entry struct {
+	Key        string `json:"key"`
+	UpdatedAt  string `json:"updated_at"`
+	ConfigSalt string `json:"config_salt"`
+}
+
+// UnmarshalJSON accepts both the current object form and the legacy key string.
+func (e *Entry) UnmarshalJSON(contents []byte) error {
+	var legacyKey string
+	if err := json.Unmarshal(contents, &legacyKey); err == nil {
+		*e = Entry{Key: legacyKey}
+		return nil
+	}
+	type entry Entry
+	var decoded entry
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return err
+	}
+	*e = Entry(decoded)
+	return nil
+}
+
+// Map associates Plane work item IDs with Jira link entries.
+type Map map[string]Entry
 
 // Store persists a link map at a configured path.
 type Store struct {

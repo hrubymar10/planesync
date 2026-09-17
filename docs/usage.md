@@ -50,15 +50,20 @@ counts summary prints after the project's final item:
 ```
 SRC-16 -> CORE-4277: updated
 SRC-17 -> CORE-4280: created
-created=1 updated=1 status-set=2 deleted=0 skipped=0
+SRC-18 -> CORE-4281: unchanged
+created=1 updated=1 unchanged=1 status-set=2 deleted=0 skipped=0
 ```
 
 Dry-run output uses `(new)` as the destination key for pending creates:
 
 ```
 SRC-17 -> (new): created
-created=1 updated=0 status-set=1 deleted=0 skipped=0
+created=1 updated=0 unchanged=0 status-set=1 deleted=0 skipped=0
 ```
+
+`unchanged` means the item's Plane `updated_at` and current write-configuration
+salt match the link map. No Jira field update or status transition is sent for
+that item.
 
 Plane and Jira requests that receive HTTP 429 retry up to five attempts. The
 delay honors `Retry-After` seconds or HTTP dates; without that header, retries

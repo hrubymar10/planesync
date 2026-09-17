@@ -71,7 +71,7 @@ if ! output=$(PLANESYNC_ALLOW_INSECURE_BASE_URLS=1 "$binary_path" sync --full --
 fi
 printf '%s\n' "$output"
 
-printf '%s\n' "$output" | grep -F 'created=1 updated=0 status-set=1 deleted=1 skipped=0' >/dev/null
+printf '%s\n' "$output" | grep -F 'created=1 updated=0 unchanged=0 status-set=1 deleted=1 skipped=0' >/dev/null
 printf '%s\n' "$output" | grep -F 'SRC-16 -> (new): created' >/dev/null
 printf '%s\n' "$output" | grep -F 'item-missing -> archived-target: deleted' >/dev/null
 

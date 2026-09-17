@@ -13,7 +13,7 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	item := testItem()
 	source := &fakeSource{changed: [][]Item{{item}}}
 	target := &fakeTarget{createKey: "created-key"}
-	links := &fakeLinks{links: map[string]string{}}
+	links := &fakeLinks{links: map[string]Entry{}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
 	var streamed []Action
@@ -37,7 +37,7 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 	if created.Reference != "SRC-16" {
 		t.Errorf("reference = %q", created.Reference)
 	}
-	if links.saved["source-item"] != "created-key" || links.saveCalls != 2 {
+	if links.saved["source-item"].Key != "created-key" || links.saved["source-item"].UpdatedAt != item.UpdatedAt.Format(time.RFC3339) || links.saved["source-item"].ConfigSalt != "test-salt" || links.saveCalls != 2 {
 		t.Errorf("saved links = %#v, calls = %d", links.saved, links.saveCalls)
 	}
 	wantAction := Action{Kind: ActionCreated, SourceID: "source-item", Reference: "SRC-16", Key: "created-key"}
@@ -52,7 +52,7 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 func TestRunUpdatesMappedItem(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{"source-item": "mapped-key"}}
+	links := &fakeLinks{links: map[string]Entry{"source-item": {Key: "mapped-key"}}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
 	report, err := service.Run(context.Background(), Options{Mode: Incremental})
@@ -74,10 +74,85 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	}
 }
 
+func TestRunLegacyEntryResynchronizesOnce(t *testing.T) {
+	item := testItem()
+	source := &fakeSource{changed: [][]Item{{item}, {item}}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]Entry{item.ID: {Key: "mapped-key"}}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+	first, err := service.Run(context.Background(), Options{Mode: Incremental})
+	if err != nil {
+		t.Fatalf("first Run(): %v", err)
+	}
+	second, err := service.Run(context.Background(), Options{Mode: Incremental})
+	if err != nil {
+		t.Fatalf("second Run(): %v", err)
+	}
+	if first.Updated != 1 || second.Unchanged != 1 {
+		t.Errorf("reports = first %#v, second %#v", first, second)
+	}
+	if len(target.updates) != 1 || len(target.statuses) != 1 || links.saveCalls != 1 {
+		t.Errorf("writes = updates=%d statuses=%d link saves=%d", len(target.updates), len(target.statuses), links.saveCalls)
+	}
+}
+
+func TestRunSkipsUnchangedMappedItem(t *testing.T) {
+	item := testItem()
+	source := &fakeSource{changed: [][]Item{{item}}}
+	target := &fakeTarget{}
+	links := &fakeLinks{links: map[string]Entry{item.ID: {
+		Key: "mapped-key", UpdatedAt: item.UpdatedAt.Format(time.RFC3339), ConfigSalt: "test-salt",
+	}}}
+	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+	report, err := service.Run(context.Background(), Options{Mode: Incremental})
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	wantAction := Action{Kind: ActionUnchanged, SourceID: item.ID, Reference: item.Identifier, Key: "mapped-key"}
+	if report.Unchanged != 1 || len(report.Actions) != 1 || report.Actions[0] != wantAction {
+		t.Errorf("report = %#v, want unchanged action %#v", report, wantAction)
+	}
+	if len(target.updates) != 0 || len(target.statuses) != 0 || links.saveCalls != 0 {
+		t.Errorf("no-op writes: updates=%d statuses=%d link saves=%d", len(target.updates), len(target.statuses), links.saveCalls)
+	}
+}
+
+func TestRunChangedUpdatedAtOrSaltUpdatesMarkers(t *testing.T) {
+	item := testItem()
+	for _, test := range []struct {
+		name  string
+		entry Entry
+	}{
+		{name: "updated_at", entry: Entry{Key: "mapped-key", UpdatedAt: item.UpdatedAt.Add(-time.Minute).Format(time.RFC3339), ConfigSalt: "test-salt"}},
+		{name: "config_salt", entry: Entry{Key: "mapped-key", UpdatedAt: item.UpdatedAt.Format(time.RFC3339), ConfigSalt: "old-salt"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := &fakeSource{changed: [][]Item{{item}}}
+			target := &fakeTarget{}
+			links := &fakeLinks{links: map[string]Entry{item.ID: test.entry}}
+			service := testService(source, target, links, mapResolver{"Started": "In Progress"})
+
+			report, err := service.Run(context.Background(), Options{Mode: Incremental})
+			if err != nil {
+				t.Fatalf("Run(): %v", err)
+			}
+			if report.Updated != 1 || len(target.updates) != 1 || len(target.statuses) != 1 {
+				t.Errorf("report/writes = %#v / %#v / %#v", report, target.updates, target.statuses)
+			}
+			got := links.saved[item.ID]
+			if got.UpdatedAt != item.UpdatedAt.Format(time.RFC3339) || got.ConfigSalt != "test-salt" {
+				t.Errorf("saved markers = %#v", got)
+			}
+		})
+	}
+}
+
 func TestRunSecondIncrementalWithNoChangesIsNoOp(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}, {}}}
 	target := &fakeTarget{createKey: "created-key"}
-	links := &fakeLinks{links: map[string]string{}}
+	links := &fakeLinks{links: map[string]Entry{}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
 	if _, err := service.Run(context.Background(), Options{Mode: Incremental}); err != nil {
@@ -98,14 +173,14 @@ func TestRunSecondIncrementalWithNoChangesIsNoOp(t *testing.T) {
 func TestRunPersistsCreatedLinkBeforeStatusFailure(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}}}
 	target := &fakeTarget{createKey: "created-key", statusErr: errors.New("status unavailable")}
-	links := &fakeLinks{links: map[string]string{}}
+	links := &fakeLinks{links: map[string]Entry{}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
 	_, err := service.Run(context.Background(), Options{Mode: Incremental})
 	if err == nil || !strings.Contains(err.Error(), "status unavailable") {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if links.saveCalls != 1 || links.saved["source-item"] != "created-key" {
+	if links.saveCalls != 1 || links.saved["source-item"].Key != "created-key" || links.saved["source-item"].UpdatedAt != "" || links.saved["source-item"].ConfigSalt != "" {
 		t.Fatalf("durable links after status failure = %#v, calls=%d", links.saved, links.saveCalls)
 	}
 }
@@ -113,7 +188,7 @@ func TestRunPersistsCreatedLinkBeforeStatusFailure(t *testing.T) {
 func TestRunSkipsUnmappedStatus(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{"source-item": "mapped-key"}}
+	links := &fakeLinks{links: map[string]Entry{"source-item": {Key: "mapped-key"}}}
 	service := testService(source, target, links, mapResolver{})
 
 	report, err := service.Run(context.Background(), Options{Mode: Incremental})
@@ -128,7 +203,7 @@ func TestRunSkipsUnmappedStatus(t *testing.T) {
 func TestRunFullReconcilesDeletedItem(t *testing.T) {
 	source := &fakeSource{listed: []Item{}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{"missing-source": "target-key"}}
+	links := &fakeLinks{links: map[string]Entry{"missing-source": {Key: "target-key"}}}
 	service := testService(source, target, links, mapResolver{})
 
 	report, err := service.Run(context.Background(), Options{Mode: Full})
@@ -153,7 +228,7 @@ func TestRunFullReconcilesDeletedItem(t *testing.T) {
 func TestRunFullReportsSkippedDelete(t *testing.T) {
 	source := &fakeSource{listed: []Item{}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{"missing-source": "target-key"}}
+	links := &fakeLinks{links: map[string]Entry{"missing-source": {Key: "target-key"}}}
 	service := testService(source, target, links, mapResolver{})
 	service.settings.DeletedStatus = ""
 
@@ -173,7 +248,7 @@ func TestRunFullReportsSkippedDelete(t *testing.T) {
 func TestRunDryRunPerformsNoWrites(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}}}
 	target := &fakeTarget{createKey: "must-not-be-used"}
-	links := &fakeLinks{links: map[string]string{}}
+	links := &fakeLinks{links: map[string]Entry{}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 
 	report, err := service.Run(context.Background(), Options{Mode: Incremental, DryRun: true})
@@ -198,7 +273,7 @@ func TestRunThrottlesBetweenRealItemsOnly(t *testing.T) {
 	second.Identifier = "SRC-17"
 	source := &fakeSource{changed: [][]Item{{first, second}}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{first.ID: "key-one", second.ID: "key-two"}}
+	links := &fakeLinks{links: map[string]Entry{first.ID: {Key: "key-one"}, second.ID: {Key: "key-two"}}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 	service.settings.Throttle = 25 * time.Millisecond
 	var waits []time.Duration
@@ -225,7 +300,7 @@ func TestRunThrottlesBetweenRealItemsOnly(t *testing.T) {
 	}
 
 	fullSource := &fakeSource{listed: []Item{first}}
-	fullLinks := &fakeLinks{links: map[string]string{first.ID: "key-one", "missing-source": "missing-key"}}
+	fullLinks := &fakeLinks{links: map[string]Entry{first.ID: {Key: "key-one"}, "missing-source": {Key: "missing-key"}}}
 	fullService := testService(fullSource, &fakeTarget{}, fullLinks, mapResolver{"Started": "In Progress"})
 	fullService.settings.Throttle = 25 * time.Millisecond
 	waits = nil
@@ -249,7 +324,7 @@ func TestRunThrottleHonorsContextCancellation(t *testing.T) {
 	second.Identifier = "SRC-17"
 	source := &fakeSource{changed: [][]Item{{first, second}}}
 	target := &fakeTarget{}
-	links := &fakeLinks{links: map[string]string{first.ID: "key-one", second.ID: "key-two"}}
+	links := &fakeLinks{links: map[string]Entry{first.ID: {Key: "key-one"}, second.ID: {Key: "key-two"}}}
 	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
 	service.settings.Throttle = time.Minute
 	ctx, cancel := context.WithCancel(context.Background())
@@ -278,6 +353,7 @@ func testService(source Source, target Target, links Links, resolver StatusResol
 	return New(source, target, links, resolver, Settings{
 		TitlePrefix: "[team]", TargetProject: "DST", TargetIssueType: "Task",
 		BodyFormat: "rich", DeletedStatus: "Removed", DeletedResolution: "Declined",
+		ContentSalt: "test-salt",
 	})
 }
 
@@ -335,18 +411,18 @@ func (f *fakeTarget) SetStatus(_ context.Context, key, status, resolution string
 }
 
 type fakeLinks struct {
-	links     map[string]string
-	saved     map[string]string
+	links     map[string]Entry
+	saved     map[string]Entry
 	saveCalls int
 }
 
-func (f *fakeLinks) Load() (map[string]string, error) {
+func (f *fakeLinks) Load() (map[string]Entry, error) {
 	return f.links, nil
 }
 
-func (f *fakeLinks) Save(links map[string]string) error {
+func (f *fakeLinks) Save(links map[string]Entry) error {
 	f.saveCalls++
-	f.saved = make(map[string]string, len(links))
+	f.saved = make(map[string]Entry, len(links))
 	for key, value := range links {
 		f.saved[key] = value
 	}
@@ -366,11 +442,11 @@ func (r mapResolver) Resolve(stateName, _ string) (string, string, bool) {
 
 func TestFakeLinksCopiesOnSave(t *testing.T) {
 	fake := &fakeLinks{}
-	input := map[string]string{"source": "target"}
+	input := map[string]Entry{"source": {Key: "target"}}
 	if err := fake.Save(input); err != nil {
 		t.Fatalf("Save(): %v", err)
 	}
-	input["source"] = "changed"
+	input["source"] = Entry{Key: "changed"}
 	if reflect.DeepEqual(fake.saved, input) {
 		t.Fatal("fake link snapshot unexpectedly aliases input")
 	}
