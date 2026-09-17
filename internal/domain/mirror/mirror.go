@@ -11,11 +11,6 @@ func Summary(prefix, title string) string {
 	return strings.TrimSpace(strings.TrimSpace(prefix) + " " + strings.TrimSpace(title))
 }
 
-// Label returns the stable idempotency label for a Plane work item.
-func Label(planeID string) string {
-	return "plane-" + strings.TrimSpace(planeID)
-}
-
 // PlainTextBody strips HTML and appends the source work item's human identifier.
 func PlainTextBody(bodyHTML, reference string) string {
 	body := stripHTML(bodyHTML)

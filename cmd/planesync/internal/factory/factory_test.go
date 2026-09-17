@@ -38,7 +38,7 @@ func TestBuildExampleConfiguration(t *testing.T) {
 
 func TestTargetAdapterForwardsTargetFields(t *testing.T) {
 	client := &fakeJiraTarget{}
-	adapter := targetAdapter{client: client, parentEpicKey: "epic-parent", components: []string{"Backend"}}
+	adapter := targetAdapter{client: client, parentEpicKey: "epic-parent", components: []string{"Backend"}, priority: "High"}
 	if _, err := adapter.Create(context.Background(), appsync.CreateSpec{}); err != nil {
 		t.Fatalf("Create(): %v", err)
 	}
@@ -50,6 +50,9 @@ func TestTargetAdapterForwardsTargetFields(t *testing.T) {
 	}
 	if len(client.created.Components) != 1 || client.created.Components[0] != "Backend" || len(client.updated.Components) != 1 || client.updated.Components[0] != "Backend" {
 		t.Errorf("create/update components = %#v/%#v", client.created.Components, client.updated.Components)
+	}
+	if client.created.Priority != "High" || client.updated.Priority != "High" {
+		t.Errorf("create/update priorities = %q/%q", client.created.Priority, client.updated.Priority)
 	}
 }
 
@@ -83,9 +86,6 @@ type fakeJiraTarget struct {
 	updated jira.UpdateInput
 }
 
-func (*fakeJiraTarget) FindByLabel(context.Context, string) (string, bool, error) {
-	return "", false, nil
-}
 func (f *fakeJiraTarget) Create(_ context.Context, input jira.CreateInput) (string, error) {
 	f.created = input
 	return "target-key", nil

@@ -62,7 +62,11 @@ func buildService(config configuration.Config, project configuration.Project, li
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},
-		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID, parentEpicKey: project.EpicKey, components: append([]string(nil), project.Components...)},
+		targetAdapter{
+			client: jiraClient, assigneeAccountID: assigneeAccountID,
+			parentEpicKey: project.EpicKey, components: append([]string(nil), project.Components...),
+			priority: project.Priority,
+		},
 		links,
 		statusmap.New(project.StatusMap, project.StatusGroupMap, project.ResolutionMap),
 		settings,
@@ -105,26 +109,23 @@ type targetAdapter struct {
 	assigneeAccountID string
 	parentEpicKey     string
 	components        []string
+	priority          string
 }
 
 type jiraTargetClient interface {
-	FindByLabel(context.Context, string) (string, bool, error)
 	Create(context.Context, jira.CreateInput) (string, error)
 	Update(context.Context, string, jira.UpdateInput) error
 	SetStatus(context.Context, string, string, string) error
 }
 
-func (a targetAdapter) FindByLabel(ctx context.Context, label string) (string, bool, error) {
-	return a.client.FindByLabel(ctx, label)
-}
-
 func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (string, error) {
 	return a.client.Create(ctx, jira.CreateInput{
 		Project: spec.Project, IssueType: spec.IssueType, Summary: spec.Summary,
-		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.Reference), Labels: spec.Labels,
+		Description:       renderBody(spec.BodyFormat, spec.BodyHTML, spec.Reference),
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
 		Components:        append([]string(nil), a.components...),
+		Priority:          a.priority,
 	})
 }
 
@@ -134,6 +135,7 @@ func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.Upda
 		AssigneeAccountID: a.assigneeAccountID,
 		ParentEpicKey:     a.parentEpicKey,
 		Components:        append([]string(nil), a.components...),
+		Priority:          a.priority,
 	})
 }
 

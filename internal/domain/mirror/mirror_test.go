@@ -22,12 +22,6 @@ func TestSummary(t *testing.T) {
 	}
 }
 
-func TestLabel(t *testing.T) {
-	if got := Label(" source-item "); got != "plane-source-item" {
-		t.Errorf("Label() = %q", got)
-	}
-}
-
 func TestPlainTextBody(t *testing.T) {
 	got := PlainTextBody(`<h2>Heading &amp; more</h2><p>Hello <strong>world</strong>.<br>Next line.</p>`, " SRC-16 ")
 	want := "Heading & more\n\nHello world.\nNext line.\n\nMirrored from Plane: SRC-16"

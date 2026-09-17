@@ -1,31 +1,25 @@
 # Linkage and idempotency
 
-planesync must never create a duplicate target issue, even if its local state is
-lost. Two mechanisms guarantee this.
-
-## The durable label
-
-Every mirrored issue is stamped with the label `plane-<source-id>`. Labels are a
-built-in, searchable field, so the source id is always recoverable from the
-target itself. This label is the authoritative fallback.
+planesync uses its local link map as the sole source of truth for source-to-target
+linkage. Mirrored target issues carry no linkage label.
 
 ## The link map
 
-A local JSON file (default `config/planesync-links.json`, gitignored) caches
-`source-id -> target-key` so a normal run avoids a search per item. It is a
+A local JSON file (default `config/planesync-links.json`, gitignored) stores
+`source-id -> target-key`. It is a
 versioned `{ "version": 1, "links": { ... } }` document written atomically
 (same-directory temp file, fsync, rename) with restrictive permissions.
-The map is persisted immediately after every create or label recovery, before
-later operations such as status transitions. A mid-run failure therefore
-cannot lose a newly established mapping and cause an index-lag duplicate on the
-next run. The end-of-run save remains as a final checkpoint.
+The map is persisted immediately after every create, before later operations
+such as status transitions. A mid-run failure therefore cannot lose a newly
+established mapping. The end-of-run save remains as a final checkpoint.
 
-- A missing or empty file loads as an empty map (a fresh host is fine).
-- Malformed JSON or an unsupported version is a clear error, not a silent wipe —
-  the label fallback still prevents duplicates.
+- A missing or empty file loads as an empty map.
+- Malformed JSON or an unsupported version is a clear error, not a silent wipe.
+- Preserve and back up the map. If it is lost, linkage cannot be reconstructed
+  from the destination and the next run recreates the source issues.
 
 ## Resolution order
 
-For each source item: look up the link map, then search for the `plane-<id>`
-label, then create. A create records the new key in the map; a label recovery
-records it too. See [status-mapping.md](status-mapping.md) for deletes.
+For each source item: update the target key found in the link map, or create a
+new target issue when the map has no entry. A create immediately records the
+new key in the map. See [status-mapping.md](status-mapping.md) for deletes.

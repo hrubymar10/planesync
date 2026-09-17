@@ -51,6 +51,7 @@ type Project struct {
 	ResolutionMap  map[string]string `json:"resolution_map,omitempty"`
 	EpicKey        string            `json:"epic_key,omitempty"`
 	Components     []string          `json:"components,omitempty"`
+	Priority       string            `json:"priority,omitempty"`
 }
 
 // Secret holds a sensitive configuration value.

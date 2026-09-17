@@ -18,7 +18,7 @@ with placeholder values only.
   "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "deleted_resolution": "Declined", "assign_all_to_me": true },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",
-      "title_prefix": "[team]", "epic_key": "DST-100", "components": ["Backend"], "status_map": { }, "status_group_map": { }, "resolution_map": { } }
+      "title_prefix": "[team]", "epic_key": "DST-100", "components": ["Backend"], "priority": "High", "status_map": { }, "status_group_map": { }, "resolution_map": { } }
   ]
 }
 ```
@@ -53,3 +53,6 @@ under that epic through the destination `parent` field.
 `projects[].components` lists destination component names applied to every
 created and updated issue. Configure every component required by the target
 issue type's create screen.
+
+`projects[].priority` optionally sets the destination priority by name on every
+created and updated issue.

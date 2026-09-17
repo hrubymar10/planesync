@@ -32,7 +32,6 @@ func main() {
 		`{"next_page_results":false,"results":[{"id":"state-open","name":"Open","group":"started"}]}`))
 	mux.HandleFunc("/api/v1/workspaces/source-workspace/projects/source-project/work-items/", jsonResponse(http.MethodGet,
 		`{"next_page_results":false,"results":[{"id":"item-current","sequence_id":16,"name":"Example item","description_html":"<p>Fixture body</p>","state":"state-open","updated_at":"2026-09-17T00:00:00Z"}]}`))
-	mux.HandleFunc("/rest/api/3/search/jql", jsonResponse(http.MethodPost, `{"issues":[]}`))
 	mux.HandleFunc("/rest/api/3/myself", jsonResponse(http.MethodGet, `{"accountId":"fixture-account"}`))
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		record := []byte(request.Method + " " + request.URL.Path + "\n")

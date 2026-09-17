@@ -6,9 +6,7 @@ type Resolution int
 const (
 	// Mapped means the durable link map contained the target issue.
 	Mapped Resolution = iota
-	// Labeled means a target issue was recovered through its idempotency label.
-	Labeled
-	// Create means no existing target issue was found.
+	// Create means the link map did not contain a target issue.
 	Create
 )
 
@@ -18,13 +16,10 @@ type Hit struct {
 	OK  bool
 }
 
-// Decide applies map, then label, then create precedence.
-func Decide(_ string, mapHit, labelHit Hit) (string, Resolution) {
+// Decide updates a mapped issue and creates an issue for a map miss.
+func Decide(mapHit Hit) (string, Resolution) {
 	if mapHit.OK {
 		return mapHit.Key, Mapped
-	}
-	if labelHit.OK {
-		return labelHit.Key, Labeled
 	}
 	return "", Create
 }

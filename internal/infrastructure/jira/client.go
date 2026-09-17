@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/hrubymar10/planesync/internal/domain/configuration"
 	"github.com/hrubymar10/planesync/internal/infrastructure/httpbase"
@@ -31,10 +30,10 @@ type CreateInput struct {
 	IssueType         string
 	Summary           string
 	Description       json.RawMessage
-	Labels            []string
 	AssigneeAccountID string
 	ParentEpicKey     string
 	Components        []string
+	Priority          string
 }
 
 // UpdateInput contains the Jira fields updated on an existing issue.
@@ -44,6 +43,7 @@ type UpdateInput struct {
 	AssigneeAccountID string
 	ParentEpicKey     string
 	Components        []string
+	Priority          string
 }
 
 type assignee struct {
@@ -58,7 +58,11 @@ type component struct {
 	Name string `json:"name"`
 }
 
-// Client creates, updates, searches, and transitions Jira issues.
+type priority struct {
+	Name string `json:"name"`
+}
+
+// Client creates, updates, and transitions Jira issues.
 type Client struct {
 	baseURL       *url.URL
 	cloudID       string
@@ -143,36 +147,6 @@ func New(baseURL, cloudID, email, authType string, token configuration.Secret) (
 	}, nil
 }
 
-// FindByLabel returns the first issue matching label.
-func (c *Client) FindByLabel(ctx context.Context, label string) (string, bool, error) {
-	escaped, err := escapeJQLString(label)
-	if err != nil {
-		return "", false, err
-	}
-	request := struct {
-		JQL        string `json:"jql"`
-		MaxResults int    `json:"maxResults"`
-	}{
-		JQL:        `labels = "` + escaped + `"`,
-		MaxResults: 1,
-	}
-	var response struct {
-		Issues []struct {
-			Key string `json:"key"`
-		} `json:"issues"`
-	}
-	if err := c.do(ctx, http.MethodPost, "search/jql", request, http.StatusOK, &response); err != nil {
-		return "", false, fmt.Errorf("search Jira issues by label: %w", err)
-	}
-	if len(response.Issues) == 0 {
-		return "", false, nil
-	}
-	if response.Issues[0].Key == "" {
-		return "", false, fmt.Errorf("search Jira issues by label: response issue has no key")
-	}
-	return response.Issues[0].Key, true, nil
-}
-
 // CurrentUserAccountID returns the account ID of the authenticating Jira user.
 func (c *Client) CurrentUserAccountID(ctx context.Context) (string, error) {
 	var response struct {
@@ -199,17 +173,16 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 			} `json:"issuetype"`
 			Summary     string          `json:"summary"`
 			Description json.RawMessage `json:"description"`
-			Labels      []string        `json:"labels"`
 			Assignee    *assignee       `json:"assignee,omitempty"`
 			Parent      *parent         `json:"parent,omitempty"`
 			Components  []component     `json:"components,omitempty"`
+			Priority    *priority       `json:"priority,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Project.Key = input.Project
 	request.Fields.IssueType.Name = input.IssueType
 	request.Fields.Summary = input.Summary
 	request.Fields.Description = input.Description
-	request.Fields.Labels = append([]string{}, input.Labels...)
 	if input.AssigneeAccountID != "" {
 		request.Fields.Assignee = &assignee{AccountID: input.AssigneeAccountID}
 	}
@@ -218,6 +191,9 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 	}
 	for _, name := range input.Components {
 		request.Fields.Components = append(request.Fields.Components, component{Name: name})
+	}
+	if strings.TrimSpace(input.Priority) != "" {
+		request.Fields.Priority = &priority{Name: input.Priority}
 	}
 
 	var response struct {
@@ -244,6 +220,7 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 			Assignee    *assignee       `json:"assignee,omitempty"`
 			Parent      *parent         `json:"parent,omitempty"`
 			Components  []component     `json:"components,omitempty"`
+			Priority    *priority       `json:"priority,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Summary = input.Summary
@@ -256,6 +233,9 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 	}
 	for _, name := range input.Components {
 		request.Fields.Components = append(request.Fields.Components, component{Name: name})
+	}
+	if strings.TrimSpace(input.Priority) != "" {
+		request.Fields.Priority = &priority{Name: input.Priority}
 	}
 	if err := c.do(ctx, http.MethodPut, "issue/"+key, request, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("update Jira issue: %w", err)
@@ -421,21 +401,4 @@ func validatePathSegment(name, value string) error {
 		return fmt.Errorf("Jira %s must be a single URL path segment", name)
 	}
 	return nil
-}
-
-func escapeJQLString(value string) (string, error) {
-	if value == "" {
-		return "", fmt.Errorf("Jira label is required")
-	}
-	var result strings.Builder
-	for _, character := range value {
-		if unicode.IsControl(character) {
-			return "", fmt.Errorf("Jira label must not contain control characters")
-		}
-		if character == '\\' || character == '"' {
-			result.WriteByte('\\')
-		}
-		result.WriteRune(character)
-	}
-	return result.String(), nil
 }

@@ -11,10 +11,8 @@ as a redacting value.
 
 ## Operations
 
-- `FindByLabel(label)` — enhanced search (`/search/jql`) for `labels = "<label>"`,
-  returning the first matching issue key.
 - `Create(spec)` — creates an issue with project, issue type, summary, an ADF
-  description, and labels.
+  description, and configured mirrored fields. It does not set labels.
 - `Update(key, spec)` — updates summary and description.
 - `CurrentUserAccountID()` — resolves the authenticating user's account ID via
   `/myself` when automatic assignment is enabled.
@@ -29,6 +27,8 @@ When a project has `epic_key`, create and update payloads also set
 `parent.key`, keeping mirrored issues under that epic after manual re-parenting.
 Configured `components` are also sent by name on every create and update. This
 is required when the destination issue type has no default component.
+Configured `priority` is sent by name on every create and update. When it is
+empty, the priority field is omitted.
 
 Descriptions are Atlassian Document Format. See [body-formatting.md](body-formatting.md).
 The base URL must be HTTPS; redirects are disabled, requests time out, response

@@ -36,7 +36,6 @@ type CreateSpec struct {
 	BodyHTML   string
 	Reference  string
 	BodyFormat string
-	Labels     []string
 }
 
 // UpdateSpec contains target fields for an existing issue.
@@ -47,9 +46,8 @@ type UpdateSpec struct {
 	BodyFormat string
 }
 
-// Target finds and mutates target issues.
+// Target mutates target issues.
 type Target interface {
-	FindByLabel(context.Context, string) (key string, found bool, err error)
 	Create(context.Context, CreateSpec) (key string, err error)
 	Update(context.Context, string, UpdateSpec) error
 	SetStatus(context.Context, string, string, string) error
@@ -192,17 +190,7 @@ func (s *Service) Run(ctx context.Context, options Options) (Report, error) {
 
 func (s *Service) syncItem(ctx context.Context, item Item, links map[string]string, dryRun bool, report *Report) error {
 	mappedKey, mapped := links[item.ID]
-	label := mirror.Label(item.ID)
-	var labelKey string
-	var labeled bool
-	if !mapped {
-		var err error
-		labelKey, labeled, err = s.target.FindByLabel(ctx, label)
-		if err != nil {
-			return fmt.Errorf("find target for source item %q: %w", item.ID, err)
-		}
-	}
-	key, resolution := linkmap.Decide(item.ID, linkmap.Hit{Key: mappedKey, OK: mapped}, linkmap.Hit{Key: labelKey, OK: labeled})
+	key, resolution := linkmap.Decide(linkmap.Hit{Key: mappedKey, OK: mapped})
 	summary := mirror.Summary(s.settings.TitlePrefix, item.Title)
 
 	switch resolution {
@@ -213,7 +201,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 			createdKey, err := s.target.Create(ctx, CreateSpec{
 				Project: s.settings.TargetProject, IssueType: s.settings.TargetIssueType,
 				Summary: summary, BodyHTML: item.BodyHTML, Reference: item.Identifier,
-				BodyFormat: s.settings.BodyFormat, Labels: []string{label},
+				BodyFormat: s.settings.BodyFormat,
 			})
 			if err != nil {
 				return fmt.Errorf("create target for source item %q: %w", item.ID, err)
@@ -224,7 +212,7 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 				return fmt.Errorf("save created link for source item %q: %w", item.ID, err)
 			}
 		}
-	case linkmap.Mapped, linkmap.Labeled:
+	case linkmap.Mapped:
 		report.Updated++
 		report.Actions = appendDryRun(report.Actions, dryRun, Action{Kind: ActionUpdate, SourceID: item.ID, Key: key, Detail: summary})
 		if !dryRun {
@@ -232,12 +220,6 @@ func (s *Service) syncItem(ctx context.Context, item Item, links map[string]stri
 				Summary: summary, BodyHTML: item.BodyHTML, Reference: item.Identifier, BodyFormat: s.settings.BodyFormat,
 			}); err != nil {
 				return fmt.Errorf("update target %q for source item %q: %w", key, item.ID, err)
-			}
-			if resolution == linkmap.Labeled {
-				links[item.ID] = key
-				if err := s.links.Save(links); err != nil {
-					return fmt.Errorf("save recovered link for source item %q: %w", item.ID, err)
-				}
 			}
 		}
 	}

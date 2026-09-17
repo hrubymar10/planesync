@@ -1,6 +1,6 @@
 # ADR 0002: Linkage via a local JSON map plus a durable `plane-<id>` label
 
-Status: Accepted
+Status: Superseded by [ADR 0004](0004-map-only-linkage.md)
 
 ## Context
 

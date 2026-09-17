@@ -46,6 +46,9 @@ func TestLoadExample(t *testing.T) {
 	if got := result.Projects[0].Components; len(got) != 1 || got[0] != "Backend" {
 		t.Errorf("components = %#v", got)
 	}
+	if got := result.Projects[0].Priority; got != "High" {
+		t.Errorf("priority = %q", got)
+	}
 }
 
 func TestLoadAcceptsJSONCCommentsAndTrailingCommas(t *testing.T) {

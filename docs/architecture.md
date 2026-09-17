@@ -16,9 +16,9 @@ standard library.
   ports it needs (source, target, links, status resolver) and orchestrates a
   run. It imports only the domain and the standard library.
 - `internal/domain` — tracker-independent rules and models: `mirror` (summary,
-  label, source-reference footer, plain-text body), `statusmap`
-  (state-to-status resolution), `linkmap` (map-then-label-then-create decision),
-  and `configuration` (the typed config model).
+  source-reference footer, plain-text body), `statusmap` (state-to-status
+  resolution), `linkmap` (map-or-create decision), and `configuration` (the
+  typed config model).
 - `internal/infrastructure` — outbound adapters: `plane` (source client),
   `jira` (target client), `linkstore` (link-map persistence), `config` (loader),
   and `httpbase` (shared base-URL guard).
@@ -26,7 +26,7 @@ standard library.
 ## Data flow
 
 A run reads work items from the source (Plane), resolves each to a target issue
-(Jira) through the link map or the durable label, applies the mirrored summary,
-status, and body, and records the link. In full and reconcile modes it also
+(Jira) through the link map, applies the mirrored summary, status, and body, and
+records the link. In full and reconcile modes it also
 transitions issues whose source item has disappeared. `--dry-run` plans every
 action without performing a write.

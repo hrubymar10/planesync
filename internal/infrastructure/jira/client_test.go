@@ -16,42 +16,6 @@ import (
 
 const testToken = "top-secret-token"
 
-func TestFindByLabelHitAndMiss(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		response  string
-		wantKey   string
-		wantFound bool
-	}{
-		{name: "hit", response: `{"issues":[{"key":"found-key"}]}`, wantKey: "found-key", wantFound: true},
-		{name: "miss", response: `{"issues":[]}`},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				assertRequest(t, request, http.MethodPost, "/rest/api/3/search/jql")
-				var body struct {
-					JQL        string `json:"jql"`
-					MaxResults int    `json:"maxResults"`
-				}
-				decodeRequest(t, request, &body)
-				if body.JQL != `labels = "source-label"` || body.MaxResults != 1 {
-					t.Errorf("search body = %#v", body)
-				}
-				writeJSON(writer, http.StatusOK, test.response)
-			}))
-			defer server.Close()
-
-			key, found, err := client.FindByLabel(context.Background(), "source-label")
-			if err != nil {
-				t.Fatalf("FindByLabel(): %v", err)
-			}
-			if key != test.wantKey || found != test.wantFound {
-				t.Errorf("FindByLabel() = %q, %t; want %q, %t", key, found, test.wantKey, test.wantFound)
-			}
-		})
-	}
-}
-
 func TestCurrentUserAccountID(t *testing.T) {
 	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		assertRequest(t, request, http.MethodGet, "/rest/api/3/myself")
@@ -68,7 +32,7 @@ func TestCurrentUserAccountID(t *testing.T) {
 	}
 }
 
-func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
+func TestCreateSendsConfiguredFieldsAndADF(t *testing.T) {
 	description := TextToADF("First paragraph\nSecond paragraph")
 	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		assertRequest(t, request, http.MethodPost, "/rest/api/3/issue")
@@ -82,18 +46,19 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 				} `json:"issuetype"`
 				Summary     string          `json:"summary"`
 				Description json.RawMessage `json:"description"`
-				Labels      []string        `json:"labels"`
+				Labels      json.RawMessage `json:"labels"`
 				Assignee    *assignee       `json:"assignee"`
 				Parent      *parent         `json:"parent"`
 				Components  []component     `json:"components"`
+				Priority    *priority       `json:"priority"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
 		if body.Fields.Project.Key != "DST" || body.Fields.IssueType.Name != "Task" || body.Fields.Summary != "Example summary" {
 			t.Errorf("create fields = %#v", body.Fields)
 		}
-		if !reflect.DeepEqual(body.Fields.Labels, []string{"source-label", "sync-label"}) {
-			t.Errorf("labels = %#v", body.Fields.Labels)
+		if body.Fields.Labels != nil {
+			t.Errorf("labels field was included: %s", body.Fields.Labels)
 		}
 		if body.Fields.Assignee == nil || body.Fields.Assignee.AccountID != "account-current" {
 			t.Errorf("assignee = %#v", body.Fields.Assignee)
@@ -103,6 +68,9 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		}
 		if !reflect.DeepEqual(body.Fields.Components, []component{{Name: "Backend"}, {Name: "API"}}) {
 			t.Errorf("components = %#v", body.Fields.Components)
+		}
+		if body.Fields.Priority == nil || body.Fields.Priority.Name != "High" {
+			t.Errorf("priority = %#v", body.Fields.Priority)
 		}
 		if !jsonEqual(body.Fields.Description, description) {
 			t.Errorf("description = %s, want %s", body.Fields.Description, description)
@@ -116,10 +84,10 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		IssueType:         "Task",
 		Summary:           "Example summary",
 		Description:       description,
-		Labels:            []string{"source-label", "sync-label"},
 		AssigneeAccountID: "account-current",
 		ParentEpicKey:     "epic-parent",
 		Components:        []string{"Backend", "API"},
+		Priority:          "High",
 	})
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
@@ -140,6 +108,7 @@ func TestUpdate(t *testing.T) {
 				Assignee    *assignee       `json:"assignee"`
 				Parent      *parent         `json:"parent"`
 				Components  []component     `json:"components"`
+				Priority    *priority       `json:"priority"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -155,11 +124,14 @@ func TestUpdate(t *testing.T) {
 		if !reflect.DeepEqual(body.Fields.Components, []component{{Name: "Backend"}}) {
 			t.Errorf("components = %#v", body.Fields.Components)
 		}
+		if body.Fields.Priority == nil || body.Fields.Priority.Name != "Highest" {
+			t.Errorf("priority = %#v", body.Fields.Priority)
+		}
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current", ParentEpicKey: "epic-parent", Components: []string{"Backend"}}); err != nil {
+	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current", ParentEpicKey: "epic-parent", Components: []string{"Backend"}, Priority: "Highest"}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 }
@@ -178,6 +150,12 @@ func TestCreateAndUpdateOmitEmptyAssignee(t *testing.T) {
 		}
 		if _, exists := body.Fields["components"]; exists {
 			t.Error("empty components were included in fields")
+		}
+		if _, exists := body.Fields["priority"]; exists {
+			t.Error("empty priority was included in fields")
+		}
+		if _, exists := body.Fields["labels"]; exists {
+			t.Error("labels were included in fields")
 		}
 		if request.Method == http.MethodPost {
 			writeJSON(writer, http.StatusCreated, `{"key":"created-key"}`)
@@ -347,26 +325,13 @@ func TestAuthenticationHeaders(t *testing.T) {
 				if got := request.Header.Get("Authorization"); got != test.want {
 					t.Errorf("Authorization header is missing or incorrect for %s authentication", test.authType)
 				}
-				writeJSON(writer, http.StatusOK, `{"issues":[]}`)
+				writeJSON(writer, http.StatusOK, `{"accountId":"account-current"}`)
 			}))
 			defer server.Close()
-			if _, _, err := client.FindByLabel(context.Background(), "source-label"); err != nil {
-				t.Fatalf("FindByLabel(): %v", err)
+			if _, err := client.CurrentUserAccountID(context.Background()); err != nil {
+				t.Fatalf("CurrentUserAccountID(): %v", err)
 			}
 		})
-	}
-}
-
-func TestFindByLabelEscapesJQLString(t *testing.T) {
-	escaped, err := escapeJQLString(`quoted" label\value`)
-	if err != nil {
-		t.Fatalf("escapeJQLString(): %v", err)
-	}
-	if escaped != `quoted\" label\\value` {
-		t.Errorf("escaped label = %q", escaped)
-	}
-	if _, err := escapeJQLString("line\nbreak"); err == nil {
-		t.Fatal("escapeJQLString() accepted a control character")
 	}
 }
 
@@ -401,9 +366,9 @@ func TestErrorResponseIncludesBoundedBodyWithoutAuthorization(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, _, err := client.FindByLabel(context.Background(), "source-label")
+	_, err := client.Create(context.Background(), CreateInput{Project: "DST", IssueType: "Task"})
 	if err == nil {
-		t.Fatal("FindByLabel() returned nil error")
+		t.Fatal("Create() returned nil error")
 	}
 	if !strings.Contains(err.Error(), detail) {
 		t.Fatalf("error omitted response body: %v", err)
@@ -445,9 +410,9 @@ func TestResponseBodyIsBounded(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, _, err := client.FindByLabel(context.Background(), "source-label")
+	_, err := client.CurrentUserAccountID(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "response exceeds") {
-		t.Fatalf("FindByLabel() error = %v, want response-size error", err)
+		t.Fatalf("CurrentUserAccountID() error = %v, want response-size error", err)
 	}
 }
 

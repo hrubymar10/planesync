@@ -27,7 +27,7 @@ func TestRunCreatesItemAndPersistsLink(t *testing.T) {
 		t.Fatalf("create calls = %d", len(target.creates))
 	}
 	created := target.creates[0]
-	if created.Project != "DST" || created.IssueType != "Task" || created.Summary != "[team] Example title" || created.Labels[0] != "plane-source-item" {
+	if created.Project != "DST" || created.IssueType != "Task" || created.Summary != "[team] Example title" {
 		t.Errorf("create spec = %#v", created)
 	}
 	if created.Reference != "SRC-16" {
@@ -51,8 +51,8 @@ func TestRunUpdatesMappedItem(t *testing.T) {
 	if report.Updated != 1 || len(target.updates) != 1 || target.updates[0].key != "mapped-key" || target.updates[0].spec.Reference != "SRC-16" {
 		t.Errorf("report/updates = %#v / %#v", report, target.updates)
 	}
-	if target.findCalls != 0 || len(target.creates) != 0 {
-		t.Errorf("unexpected lookup/create calls: find=%d create=%d", target.findCalls, len(target.creates))
+	if len(target.creates) != 0 {
+		t.Errorf("unexpected create calls: %d", len(target.creates))
 	}
 	if len(target.statuses) != 1 || target.statuses[0].resolution != "Fixed" {
 		t.Errorf("status calls = %#v", target.statuses)
@@ -80,24 +80,6 @@ func TestRunSecondIncrementalWithNoChangesIsNoOp(t *testing.T) {
 	}
 }
 
-func TestRunRecoversLinkByLabel(t *testing.T) {
-	source := &fakeSource{changed: [][]Item{{testItem()}}}
-	target := &fakeTarget{labelKey: "recovered-key", labelFound: true}
-	links := &fakeLinks{links: map[string]string{}}
-	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
-
-	report, err := service.Run(context.Background(), Options{Mode: Incremental})
-	if err != nil {
-		t.Fatalf("Run(): %v", err)
-	}
-	if report.Updated != 1 || target.findLabel != "plane-source-item" || len(target.updates) != 1 {
-		t.Errorf("report/target = %#v / %#v", report, target)
-	}
-	if links.saved["source-item"] != "recovered-key" || links.saveCalls != 2 {
-		t.Errorf("saved links = %#v", links.saved)
-	}
-}
-
 func TestRunPersistsCreatedLinkBeforeStatusFailure(t *testing.T) {
 	source := &fakeSource{changed: [][]Item{{testItem()}}}
 	target := &fakeTarget{createKey: "created-key", statusErr: errors.New("status unavailable")}
@@ -109,21 +91,6 @@ func TestRunPersistsCreatedLinkBeforeStatusFailure(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if links.saveCalls != 1 || links.saved["source-item"] != "created-key" {
-		t.Fatalf("durable links after status failure = %#v, calls=%d", links.saved, links.saveCalls)
-	}
-}
-
-func TestRunPersistsRecoveredLinkBeforeStatusFailure(t *testing.T) {
-	source := &fakeSource{changed: [][]Item{{testItem()}}}
-	target := &fakeTarget{labelKey: "recovered-key", labelFound: true, statusErr: errors.New("status unavailable")}
-	links := &fakeLinks{links: map[string]string{}}
-	service := testService(source, target, links, mapResolver{"Started": "In Progress"})
-
-	_, err := service.Run(context.Background(), Options{Mode: Incremental})
-	if err == nil || !strings.Contains(err.Error(), "status unavailable") {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if links.saveCalls != 1 || links.saved["source-item"] != "recovered-key" {
 		t.Fatalf("durable links after status failure = %#v, calls=%d", links.saved, links.saveCalls)
 	}
 }
@@ -174,7 +141,7 @@ func TestRunDryRunPerformsNoWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if target.findCalls != 1 || len(target.creates) != 0 || len(target.updates) != 0 || len(target.statuses) != 0 || links.saveCalls != 0 {
+	if len(target.creates) != 0 || len(target.updates) != 0 || len(target.statuses) != 0 || links.saveCalls != 0 {
 		t.Errorf("dry-run calls: target=%#v save=%d", target, links.saveCalls)
 	}
 	if report.Created != 1 || report.StatusSet != 1 || len(report.Actions) != 2 || report.Actions[0].Kind != ActionCreate || report.Actions[1].Kind != ActionSetStatus {
@@ -230,21 +197,11 @@ type statusCall struct {
 }
 
 type fakeTarget struct {
-	labelKey   string
-	labelFound bool
-	createKey  string
-	findCalls  int
-	findLabel  string
-	creates    []CreateSpec
-	updates    []updateCall
-	statuses   []statusCall
-	statusErr  error
-}
-
-func (f *fakeTarget) FindByLabel(_ context.Context, label string) (string, bool, error) {
-	f.findCalls++
-	f.findLabel = label
-	return f.labelKey, f.labelFound, nil
+	createKey string
+	creates   []CreateSpec
+	updates   []updateCall
+	statuses  []statusCall
+	statusErr error
 }
 
 func (f *fakeTarget) Create(_ context.Context, spec CreateSpec) (string, error) {

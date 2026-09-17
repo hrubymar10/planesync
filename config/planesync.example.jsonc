@@ -30,6 +30,7 @@
       "jira_issue_type": "Task",
       "epic_key": "DST-100",
       "components": ["Backend"],
+      "priority": "High",
       "title_prefix": "[team]",
       "status_map": {
         "Backlog": "To Do",
