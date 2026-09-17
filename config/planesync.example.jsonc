@@ -20,6 +20,7 @@
     "since": "7d",
     "body_format": "rich",
     "deleted_status": "Done",
+	"assign_all_to_me": true,
   },
 
   "projects": [

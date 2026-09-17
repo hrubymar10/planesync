@@ -52,6 +52,22 @@ func TestFindByLabelHitAndMiss(t *testing.T) {
 	}
 }
 
+func TestCurrentUserAccountID(t *testing.T) {
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		assertRequest(t, request, http.MethodGet, "/rest/api/3/myself")
+		writeJSON(writer, http.StatusOK, `{"accountId":"account-current"}`)
+	}))
+	defer server.Close()
+
+	accountID, err := client.CurrentUserAccountID(context.Background())
+	if err != nil {
+		t.Fatalf("CurrentUserAccountID(): %v", err)
+	}
+	if accountID != "account-current" {
+		t.Errorf("account ID = %q", accountID)
+	}
+}
+
 func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 	description := TextToADF("First paragraph\nSecond paragraph")
 	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -67,6 +83,7 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 				Summary     string          `json:"summary"`
 				Description json.RawMessage `json:"description"`
 				Labels      []string        `json:"labels"`
+				Assignee    *assignee       `json:"assignee"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
@@ -76,6 +93,9 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 		if !reflect.DeepEqual(body.Fields.Labels, []string{"source-label", "sync-label"}) {
 			t.Errorf("labels = %#v", body.Fields.Labels)
 		}
+		if body.Fields.Assignee == nil || body.Fields.Assignee.AccountID != "account-current" {
+			t.Errorf("assignee = %#v", body.Fields.Assignee)
+		}
 		if !jsonEqual(body.Fields.Description, description) {
 			t.Errorf("description = %s, want %s", body.Fields.Description, description)
 		}
@@ -84,11 +104,12 @@ func TestCreateSendsFieldsLabelsAndADF(t *testing.T) {
 	defer server.Close()
 
 	key, err := client.Create(context.Background(), CreateInput{
-		Project:     "DST",
-		IssueType:   "Task",
-		Summary:     "Example summary",
-		Description: description,
-		Labels:      []string{"source-label", "sync-label"},
+		Project:           "DST",
+		IssueType:         "Task",
+		Summary:           "Example summary",
+		Description:       description,
+		Labels:            []string{"source-label", "sync-label"},
+		AssigneeAccountID: "account-current",
 	})
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
@@ -106,17 +127,46 @@ func TestUpdate(t *testing.T) {
 			Fields struct {
 				Summary     string          `json:"summary"`
 				Description json.RawMessage `json:"description"`
+				Assignee    *assignee       `json:"assignee"`
 			} `json:"fields"`
 		}
 		decodeRequest(t, request, &body)
 		if body.Fields.Summary != "Updated summary" || !jsonEqual(body.Fields.Description, description) {
 			t.Errorf("update fields = %#v", body.Fields)
 		}
+		if body.Fields.Assignee == nil || body.Fields.Assignee.AccountID != "account-current" {
+			t.Errorf("assignee = %#v", body.Fields.Assignee)
+		}
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description}); err != nil {
+	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Updated summary", Description: description, AssigneeAccountID: "account-current"}); err != nil {
+		t.Fatalf("Update(): %v", err)
+	}
+}
+
+func TestCreateAndUpdateOmitEmptyAssignee(t *testing.T) {
+	client, server := newTestClient(t, "you@example.com", "basic", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Fields map[string]json.RawMessage `json:"fields"`
+		}
+		decodeRequest(t, request, &body)
+		if _, exists := body.Fields["assignee"]; exists {
+			t.Error("empty assignee was included in fields")
+		}
+		if request.Method == http.MethodPost {
+			writeJSON(writer, http.StatusCreated, `{"key":"created-key"}`)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	if _, err := client.Create(context.Background(), CreateInput{Project: "DST", IssueType: "Task", Summary: "Summary", Description: TextToADF("Body")}); err != nil {
+		t.Fatalf("Create(): %v", err)
+	}
+	if err := client.Update(context.Background(), "example-key", UpdateInput{Summary: "Summary", Description: TextToADF("Body")}); err != nil {
 		t.Fatalf("Update(): %v", err)
 	}
 }

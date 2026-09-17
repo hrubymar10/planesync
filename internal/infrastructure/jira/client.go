@@ -25,17 +25,23 @@ const (
 
 // CreateInput contains the Jira fields set when creating an issue.
 type CreateInput struct {
-	Project     string
-	IssueType   string
-	Summary     string
-	Description json.RawMessage
-	Labels      []string
+	Project           string
+	IssueType         string
+	Summary           string
+	Description       json.RawMessage
+	Labels            []string
+	AssigneeAccountID string
 }
 
 // UpdateInput contains the Jira fields updated on an existing issue.
 type UpdateInput struct {
-	Summary     string
-	Description json.RawMessage
+	Summary           string
+	Description       json.RawMessage
+	AssigneeAccountID string
+}
+
+type assignee struct {
+	AccountID string `json:"accountId"`
 }
 
 // Client creates, updates, searches, and transitions Jira issues.
@@ -141,6 +147,20 @@ func (c *Client) FindByLabel(ctx context.Context, label string) (string, bool, e
 	return response.Issues[0].Key, true, nil
 }
 
+// CurrentUserAccountID returns the account ID of the authenticating Jira user.
+func (c *Client) CurrentUserAccountID(ctx context.Context) (string, error) {
+	var response struct {
+		AccountID string `json:"accountId"`
+	}
+	if err := c.do(ctx, http.MethodGet, "myself", nil, http.StatusOK, &response); err != nil {
+		return "", fmt.Errorf("get current Jira user: %w", err)
+	}
+	if strings.TrimSpace(response.AccountID) == "" {
+		return "", fmt.Errorf("get current Jira user: response has no accountId")
+	}
+	return response.AccountID, nil
+}
+
 // Create creates a Jira issue and returns its key.
 func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) {
 	request := struct {
@@ -154,6 +174,7 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 			Summary     string          `json:"summary"`
 			Description json.RawMessage `json:"description"`
 			Labels      []string        `json:"labels"`
+			Assignee    *assignee       `json:"assignee,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Project.Key = input.Project
@@ -161,6 +182,9 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (string, error) 
 	request.Fields.Summary = input.Summary
 	request.Fields.Description = input.Description
 	request.Fields.Labels = append([]string{}, input.Labels...)
+	if input.AssigneeAccountID != "" {
+		request.Fields.Assignee = &assignee{AccountID: input.AssigneeAccountID}
+	}
 
 	var response struct {
 		Key string `json:"key"`
@@ -183,10 +207,14 @@ func (c *Client) Update(ctx context.Context, key string, input UpdateInput) erro
 		Fields struct {
 			Summary     string          `json:"summary"`
 			Description json.RawMessage `json:"description"`
+			Assignee    *assignee       `json:"assignee,omitempty"`
 		} `json:"fields"`
 	}{}
 	request.Fields.Summary = input.Summary
 	request.Fields.Description = input.Description
+	if input.AssigneeAccountID != "" {
+		request.Fields.Assignee = &assignee{AccountID: input.AssigneeAccountID}
+	}
 	if err := c.do(ctx, http.MethodPut, "issue/"+key, request, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("update Jira issue: %w", err)
 	}

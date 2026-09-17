@@ -48,6 +48,13 @@ func buildService(config configuration.Config, project configuration.Project, li
 	if err != nil {
 		return nil, err
 	}
+	var assigneeAccountID string
+	if config.Defaults.ShouldAssignAllToMe() {
+		assigneeAccountID, err = jiraClient.CurrentUserAccountID(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("resolve Jira assignee: %w", err)
+		}
+	}
 	appBaseURL := config.Plane.AppBaseURL
 	if strings.TrimSpace(appBaseURL) == "" {
 		appBaseURL = config.Plane.BaseURL
@@ -60,7 +67,7 @@ func buildService(config configuration.Config, project configuration.Project, li
 	}
 	return appsync.New(
 		sourceAdapter{client: planeClient},
-		targetAdapter{client: jiraClient},
+		targetAdapter{client: jiraClient, assigneeAccountID: assigneeAccountID},
 		links,
 		statusmap.New(project.StatusMap, project.StatusGroupMap),
 		settings,
@@ -99,7 +106,8 @@ func sourceItems(items []plane.Item) []appsync.Item {
 }
 
 type targetAdapter struct {
-	client *jira.Client
+	client            *jira.Client
+	assigneeAccountID string
 }
 
 func (a targetAdapter) FindByLabel(ctx context.Context, label string) (string, bool, error) {
@@ -110,12 +118,14 @@ func (a targetAdapter) Create(ctx context.Context, spec appsync.CreateSpec) (str
 	return a.client.Create(ctx, jira.CreateInput{
 		Project: spec.Project, IssueType: spec.IssueType, Summary: spec.Summary,
 		Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink), Labels: spec.Labels,
+		AssigneeAccountID: a.assigneeAccountID,
 	})
 }
 
 func (a targetAdapter) Update(ctx context.Context, key string, spec appsync.UpdateSpec) error {
 	return a.client.Update(ctx, key, jira.UpdateInput{
 		Summary: spec.Summary, Description: renderBody(spec.BodyFormat, spec.BodyHTML, spec.BackLink),
+		AssigneeAccountID: a.assigneeAccountID,
 	})
 }
 

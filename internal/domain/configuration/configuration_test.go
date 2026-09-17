@@ -117,3 +117,24 @@ func TestValidateJiraAuthentication(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultsAssignAllToMe(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		json string
+		want bool
+	}{
+		{name: "absent defaults true", json: `{}`, want: true},
+		{name: "explicit false", json: `{"assign_all_to_me":false}`, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var defaults Defaults
+			if err := json.Unmarshal([]byte(test.json), &defaults); err != nil {
+				t.Fatalf("json.Unmarshal(): %v", err)
+			}
+			if got := defaults.ShouldAssignAllToMe(); got != test.want {
+				t.Errorf("ShouldAssignAllToMe() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}

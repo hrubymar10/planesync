@@ -15,7 +15,7 @@ with placeholder values only.
 {
   "jira":  { "base_url": "...", "cloud_id": "...", "email": "...", "auth_type": "basic", "token": "${JIRA_TOKEN}" },
   "plane": { "base_url": "...", "workspace": "...", "app_base_url": "...", "token": "${PLANE_TOKEN}" },
-  "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done" },
+  "defaults": { "since": "7d", "body_format": "rich", "deleted_status": "Done", "assign_all_to_me": true },
   "projects": [
     { "plane_project": "SRC", "jira_project": "DST", "jira_issue_type": "Task",
       "title_prefix": "[team]", "status_map": { }, "status_group_map": { } }
@@ -38,3 +38,7 @@ Required: `jira.base_url`, `jira.cloud_id`, `plane.base_url`, `plane.workspace`,
 project with its `plane_project`, `jira_project`, and `jira_issue_type`. When
 `jira.auth_type` is `basic` (the default) an email is required; when `bearer`
 the email must be empty.
+
+`defaults.assign_all_to_me` controls whether every created or updated target
+issue is assigned to the authenticating user. It defaults to `true` when
+omitted; set it to `false` to leave assignment unchanged.
