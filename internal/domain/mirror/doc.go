@@ -1,2 +1,2 @@
-// Package mirror defines the rules for mirroring source issues to a target tracker.
+// Package mirror builds target-facing strings for mirrored work items.
 package mirror

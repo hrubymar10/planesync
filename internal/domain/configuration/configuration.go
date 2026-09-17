@@ -16,12 +16,13 @@ type Config struct {
 
 // Endpoint describes a tracker API endpoint and its default token.
 type Endpoint struct {
-	BaseURL   string `json:"base_url"`
-	CloudID   string `json:"cloud_id,omitempty"`
-	Workspace string `json:"workspace,omitempty"`
-	Email     string `json:"email,omitempty"`
-	AuthType  string `json:"auth_type,omitempty"`
-	Token     Secret `json:"token,omitempty"`
+	BaseURL    string `json:"base_url"`
+	AppBaseURL string `json:"app_base_url,omitempty"`
+	CloudID    string `json:"cloud_id,omitempty"`
+	Workspace  string `json:"workspace,omitempty"`
+	Email      string `json:"email,omitempty"`
+	AuthType   string `json:"auth_type,omitempty"`
+	Token      Secret `json:"token,omitempty"`
 }
 
 // Defaults contains settings shared by all project mappings.
@@ -32,13 +33,14 @@ type Defaults struct {
 
 // Project maps a Plane project to a Jira project.
 type Project struct {
-	PlaneProject  string            `json:"plane_project"`
-	JiraProject   string            `json:"jira_project"`
-	JiraIssueType string            `json:"jira_issue_type"`
-	TitlePrefix   string            `json:"title_prefix,omitempty"`
-	JiraToken     Secret            `json:"jira_token,omitempty"`
-	PlaneToken    Secret            `json:"plane_token,omitempty"`
-	StatusMap     map[string]string `json:"status_map"`
+	PlaneProject   string            `json:"plane_project"`
+	JiraProject    string            `json:"jira_project"`
+	JiraIssueType  string            `json:"jira_issue_type"`
+	TitlePrefix    string            `json:"title_prefix,omitempty"`
+	JiraToken      Secret            `json:"jira_token,omitempty"`
+	PlaneToken     Secret            `json:"plane_token,omitempty"`
+	StatusMap      map[string]string `json:"status_map"`
+	StatusGroupMap map[string]string `json:"status_group_map,omitempty"`
 }
 
 // Secret holds a sensitive configuration value.

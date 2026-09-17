@@ -11,6 +11,7 @@
   // Plane is the source tracker.
   "plane": {
     "base_url": "https://api.plane.so",
+    "app_base_url": "https://app.plane.so",
     "workspace": "example-workspace",
     "token": "${PLANE_TOKEN}",
   },
@@ -30,6 +31,11 @@
         "Backlog": "To Do",
         "Started": "In Progress",
         "Completed": "Done",
+      },
+      "status_group_map": {
+        "backlog": "To Do",
+        "started": "In Progress",
+        "completed": "Done",
       },
     },
   ],

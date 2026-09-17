@@ -1,2 +1,2 @@
-// Package linkmap models durable links between source and target issues.
+// Package linkmap decides how a source item resolves to a target issue.
 package linkmap
