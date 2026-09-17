@@ -274,7 +274,7 @@ func inlineFrom(nodes []*htmlNode, marks []adfMark) []adfNode {
 		if node.tag == "" {
 			text := normalizeInlineText(node.text)
 			if text != "" {
-				result = append(result, adfNode{Type: "text", Text: text, Marks: cloneMarks(marks)})
+				result = append(result, adfNode{Type: "text", Text: text, Marks: finalizeMarks(marks)})
 			}
 			continue
 		}
@@ -365,6 +365,29 @@ func cloneMarks(marks []adfMark) []adfMark {
 		return nil
 	}
 	return append([]adfMark(nil), marks...)
+}
+
+func finalizeMarks(marks []adfMark) []adfMark {
+	hasCode := false
+	for _, mark := range marks {
+		if mark.Type == "code" {
+			hasCode = true
+			break
+		}
+	}
+	if !hasCode {
+		return cloneMarks(marks)
+	}
+
+	result := make([]adfMark, 0, 2)
+	kept := make(map[string]bool, 2)
+	for _, mark := range marks {
+		if (mark.Type == "code" || mark.Type == "link") && !kept[mark.Type] {
+			result = append(result, mark)
+			kept[mark.Type] = true
+		}
+	}
+	return result
 }
 
 func referenceParagraph(reference string) adfNode {

@@ -94,6 +94,32 @@ func TestHTMLToADFInlineMarks(t *testing.T) {
 	}
 }
 
+func TestHTMLToADFCodeMarkDropsIncompatibleMarks(t *testing.T) {
+	document := decodeADF(t, HTMLToADF(`<b>x <code>y</code> z</b>`, "SRC-16"))
+	content := document.Content[0].Content
+	if len(content) != 3 {
+		t.Fatalf("inline content = %#v", content)
+	}
+	if content[0].Text != "x " || content[2].Text != " z" || !equalMarkTypes(content[0].Marks, "strong") || !equalMarkTypes(content[2].Marks, "strong") {
+		t.Errorf("surrounding bold text = %#v / %#v", content[0], content[2])
+	}
+	if content[1].Text != "y" || !equalMarkTypes(content[1].Marks, "code") {
+		t.Errorf("nested code text = %#v, want only code mark", content[1])
+	}
+
+	emphasized := decodeADF(t, HTMLToADF(`<em><code>value</code></em>`, "SRC-16"))
+	code := emphasized.Content[0].Content[0]
+	if !equalMarkTypes(code.Marks, "code") {
+		t.Errorf("code inside emphasis = %#v, want only code mark", code)
+	}
+
+	linked := decodeADF(t, HTMLToADF(`<a href="https://example.com"><strong><code>value</code></strong></a>`, "SRC-16"))
+	linkedCode := linked.Content[0].Content[0]
+	if !equalMarkTypes(linkedCode.Marks, "link", "code") {
+		t.Errorf("linked code = %#v, want link and code marks", linkedCode)
+	}
+}
+
 func TestHTMLToADFHeadingLevels(t *testing.T) {
 	for level := 1; level <= 6; level++ {
 		t.Run(fmt.Sprintf("h%d", level), func(t *testing.T) {
@@ -164,4 +190,16 @@ func inlineText(node adfNode) string {
 		text += child.Text
 	}
 	return text
+}
+
+func equalMarkTypes(marks []adfMark, want ...string) bool {
+	if len(marks) != len(want) {
+		return false
+	}
+	for index := range want {
+		if marks[index].Type != want[index] {
+			return false
+		}
+	}
+	return true
 }
