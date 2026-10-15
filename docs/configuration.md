@@ -5,9 +5,13 @@ commas allowed) plus two secrets taken from the environment.
 
 ## Location
 
-Default: `config/planesync.jsonc` (override with `--config <path>`). The live
-file is gitignored; a committed `config/planesync.example.jsonc` shows the shape
-with placeholder values only.
+Resolution order: an explicit `--config <path>` wins; then the `PLANESYNC_CONFIG`
+environment variable; then `config/planesync.jsonc` resolved **next to the
+planesync binary** (so it works from any working directory); then
+`config/planesync.jsonc` relative to the current working directory. When none of
+these exist, the error lists the paths it tried. The live file is gitignored; a
+committed `config/planesync.example.jsonc` shows the shape with placeholder
+values only.
 
 ## Shape
 

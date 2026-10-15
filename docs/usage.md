@@ -31,7 +31,9 @@ with `--full` and `--reconcile`.
   `updated` without performing writes.
 - `--since` — incremental window; `Nd` (days), `Nh` (hours), or an RFC3339
   timestamp. Default `1h`. Ignored by full, reconcile, and identifier modes.
-- `--config` — path to the config file (default `config/planesync.jsonc`).
+- `--config` — path to the config file. When omitted, planesync uses
+  `$PLANESYNC_CONFIG`, else `config/planesync.jsonc` resolved next to the
+  binary, else relative to the working directory.
 
 ## Modes
 

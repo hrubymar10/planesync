@@ -82,7 +82,7 @@ func TestRunDefaultsToOneHourWindow(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := runWithoutLock([]string{"sync"}, build, &stdout, &stderr, func() time.Time { return now }); code != 0 {
+	if code := runWithoutLock([]string{"sync", "--config", "test.jsonc"}, build, &stdout, &stderr, func() time.Time { return now }); code != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
 	}
 	if !got.Since.Equal(now.Add(-time.Hour)) {
@@ -99,7 +99,7 @@ func TestRunAcceptsIdentifierAndIgnoresSince(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := runWithoutLock([]string{"sync", "--since", "not-a-window", "SRC-123"}, build, &stdout, &stderr, time.Now); code != 0 {
+	if code := runWithoutLock([]string{"sync", "--config", "test.jsonc", "--since", "not-a-window", "SRC-123"}, build, &stdout, &stderr, time.Now); code != 0 {
 		t.Fatalf("run() exit=%d stderr=%q", code, stderr.String())
 	}
 	if got.Identifier != "SRC-123" || !got.Since.IsZero() {
@@ -133,7 +133,7 @@ func TestRunLockFailureIsRuntimeError(t *testing.T) {
 	lockErr := errors.New("another planesync instance appears to be running; lock held since timestamp")
 	acquire := func(string, time.Duration) (func() error, error) { return nil, lockErr }
 	var stdout, stderr bytes.Buffer
-	code := runWithLock([]string{"sync"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
+	code := runWithLock([]string{"sync", "--config", "test.jsonc"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
 	if code != 1 || !strings.Contains(stderr.String(), lockErr.Error()) {
 		t.Errorf("runWithLock() exit=%d stderr=%q", code, stderr.String())
 	}
@@ -145,7 +145,7 @@ func TestRunDryRunDoesNotAcquireLock(t *testing.T) {
 		return nil, nil
 	}
 	var stdout, stderr bytes.Buffer
-	code := runWithLock([]string{"sync", "--dry-run"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
+	code := runWithLock([]string{"sync", "--config", "test.jsonc", "--dry-run"}, func(string) ([]Project, error) { return nil, nil }, &stdout, &stderr, time.Now, acquire)
 	if code != 0 || stderr.Len() != 0 {
 		t.Errorf("runWithLock() exit=%d stderr=%q", code, stderr.String())
 	}
@@ -178,7 +178,7 @@ func TestRunKeepsStreamedOutputWhenServiceFails(t *testing.T) {
 		}}}, nil
 	}
 	var stdout, stderr bytes.Buffer
-	if code := runWithoutLock([]string{"sync"}, build, &stdout, &stderr, time.Now); code != 1 {
+	if code := runWithoutLock([]string{"sync", "--config", "test.jsonc"}, build, &stdout, &stderr, time.Now); code != 1 {
 		t.Fatalf("run() exit = %d, want 1", code)
 	}
 	if stdout.String() != "SRC-16 -> CORE-4277: updated\n" || !strings.Contains(stderr.String(), "later failure") {
@@ -201,11 +201,11 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "identifier with reconcile", args: []string{"sync", "--reconcile", "SRC-123"}, wantCode: 2, wantError: "mutually exclusive"},
 		{name: "too many identifiers", args: []string{"sync", "SRC-123", "SRC-124"}, wantCode: 2, wantError: "at most one"},
 		{
-			name: "builder failure", args: []string{"sync"}, wantCode: 1, wantError: "configuration error",
+			name: "builder failure", args: []string{"sync", "--config", "test.jsonc"}, wantCode: 1, wantError: "configuration error",
 			build: func(string) ([]Project, error) { return nil, errors.New("unavailable") },
 		},
 		{
-			name: "service failure", args: []string{"sync"}, wantCode: 1, wantError: "sync failed",
+			name: "service failure", args: []string{"sync", "--config", "test.jsonc"}, wantCode: 1, wantError: "sync failed",
 			build: func(string) ([]Project, error) {
 				return []Project{{Name: "project", Run: func(context.Context, appsync.Options) (appsync.Report, error) {
 					return appsync.Report{}, errors.New("failed")
@@ -243,5 +243,53 @@ func TestRunHelp(t *testing.T) {
 func runWithoutLock(args []string, build Builder, stdout, stderr *bytes.Buffer, now func() time.Time) int {
 	return runWithLock(args, build, stdout, stderr, now, func(string, time.Duration) (func() error, error) {
 		return func() error { return nil }, nil
+	})
+}
+
+func TestResolveConfigPath(t *testing.T) {
+	existsSet := func(paths ...string) func(string) bool {
+		set := map[string]bool{}
+		for _, p := range paths {
+			set[p] = true
+		}
+		return func(p string) bool { return set[p] }
+	}
+	exeCfg := filepath.Join("/exe", "config", "planesync.jsonc")
+	cwdCfg := filepath.Join("/cwd", "config", "planesync.jsonc")
+
+	t.Run("explicit wins", func(t *testing.T) {
+		got, err := resolveConfigPath("/explicit.jsonc", "/env.jsonc", "/exe", "/cwd", existsSet(exeCfg, cwdCfg))
+		if err != nil || got != "/explicit.jsonc" {
+			t.Fatalf("got %q, %v", got, err)
+		}
+	})
+	t.Run("env over default", func(t *testing.T) {
+		got, err := resolveConfigPath("", "/env.jsonc", "/exe", "/cwd", existsSet(exeCfg))
+		if err != nil || got != "/env.jsonc" {
+			t.Fatalf("got %q, %v", got, err)
+		}
+	})
+	t.Run("executable-relative preferred", func(t *testing.T) {
+		got, err := resolveConfigPath("", "", "/exe", "/cwd", existsSet(exeCfg, cwdCfg))
+		if err != nil || got != exeCfg {
+			t.Fatalf("got %q, %v", got, err)
+		}
+	})
+	t.Run("falls back to cwd", func(t *testing.T) {
+		got, err := resolveConfigPath("", "", "/exe", "/cwd", existsSet(cwdCfg))
+		if err != nil || got != cwdCfg {
+			t.Fatalf("got %q, %v", got, err)
+		}
+	})
+	t.Run("none found lists tried paths", func(t *testing.T) {
+		_, err := resolveConfigPath("", "", "/exe", "/cwd", existsSet())
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		for _, want := range []string{exeCfg, cwdCfg, configEnvVar} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("error %q missing %q", err.Error(), want)
+			}
+		}
 	})
 }

@@ -17,7 +17,8 @@ import (
 	"github.com/hrubymar10/planesync/internal/infrastructure/lockfile"
 )
 
-const defaultConfigPath = "config/planesync.jsonc"
+// configEnvVar overrides the default configuration path.
+const configEnvVar = "PLANESYNC_CONFIG"
 
 // Project is a configured project synchronization runner.
 type Project struct {
@@ -61,7 +62,7 @@ func runWithLock(args []string, build Builder, stdout, stderr io.Writer, now fun
 	dryRun := flags.Bool("dry-run", false, "show intended writes without applying them")
 	force := flags.Bool("force", false, "update mapped items even when synchronization markers match")
 	sinceValue := flags.String("since", "1h", "incremental window (Nd, Nh, or RFC3339)")
-	configPath := flags.String("config", defaultConfigPath, "configuration file path")
+	configPath := flags.String("config", "", "configuration file path (default: <planesync dir>/config/planesync.jsonc, or $PLANESYNC_CONFIG)")
 	limit := flags.Int("limit", 0, "maximum source items to process (0 is unlimited)")
 	flags.Usage = func() { printSyncUsage(flags.Output()) }
 	if err := flags.Parse(args[1:]); err != nil {
@@ -109,13 +110,24 @@ func runWithLock(args []string, build Builder, stdout, stderr io.Writer, now fun
 	options := appsync.Options{Mode: mode, Since: since, Identifier: identifier, DryRun: *dryRun, Force: *force, Limit: *limit}
 	options.OnItem = func(action appsync.Action) { printAction(stdout, action) }
 
-	projects, err := build(*configPath)
+	exeDir := ""
+	if exe, exeErr := os.Executable(); exeErr == nil {
+		exeDir = filepath.Dir(exe)
+	}
+	cwd, _ := os.Getwd()
+	resolvedConfig, cfgErr := resolveConfigPath(*configPath, os.Getenv(configEnvVar), exeDir, cwd, fileExists)
+	if cfgErr != nil {
+		fmt.Fprintf(stderr, "configuration error: %v\n", cfgErr)
+		return 1
+	}
+
+	projects, err := build(resolvedConfig)
 	if err != nil {
 		fmt.Fprintf(stderr, "configuration error: %v\n", err)
 		return 1
 	}
 	if !*dryRun {
-		lockPath := filepath.Join(filepath.Dir(*configPath), "planesync.lock")
+		lockPath := filepath.Join(filepath.Dir(resolvedConfig), "planesync.lock")
 		release, err := acquire(lockPath, 10*time.Minute)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
@@ -156,6 +168,35 @@ func parseSince(value string, now time.Time) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("expected Nd, Nh, or RFC3339")
 	}
 	return now.Add(-duration), nil
+}
+
+// resolveConfigPath picks the configuration file: an explicit --config wins,
+// then $PLANESYNC_CONFIG, then config/planesync.jsonc resolved next to the
+// executable, then relative to the working directory.
+func resolveConfigPath(explicit, env, exeDir, cwd string, exists func(string) bool) (string, error) {
+	if strings.TrimSpace(explicit) != "" {
+		return explicit, nil
+	}
+	if strings.TrimSpace(env) != "" {
+		return env, nil
+	}
+	var tried []string
+	for _, dir := range []string{exeDir, cwd} {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, "config", "planesync.jsonc")
+		tried = append(tried, candidate)
+		if exists(candidate) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no configuration file found; pass --config or set %s (tried: %s)", configEnvVar, strings.Join(tried, ", "))
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func printReport(output io.Writer, report appsync.Report) {
